@@ -1,0 +1,23 @@
+# Machine-specific history, tools, and generated outputs
+.local/
+.tools/
+archive/
+artifacts/
+
+# Secrets and local overrides
+*.local.psd1
+*.local.json
+credentials*
+.env
+.env.*
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Editors and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp

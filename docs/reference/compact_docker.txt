@@ -1,0 +1,8 @@
+rem Reference template ONLY. Run scripts\maintenance\Invoke-VhdCompaction.ps1 with explicit -VhdPath.
+rem No default VHD or Docker distribution is guessed. Do not run diskpart /s on this file.
+rem The wrapper generates a private script with one validated literal file path.
+rem Storage owns the read-only attachment and releases it in finally on failure.
+rem The placeholder deliberately fails selection if this template is run directly.
+select vdisk file="__VALIDATED_VHD_PATH__"
+compact vdisk
+exit

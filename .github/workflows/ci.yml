@@ -1,0 +1,46 @@
+name: Windows validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate (${{ matrix.shell }})
+    runs-on: windows-2022
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install verified development dependencies
+        run: ./tools/Install-DevDependencies.ps1 -Confirm:$false
+
+      - name: Parse, lint, test, and measure coverage
+        run: ./Test.ps1 -Coverage -OutputPath "${{ github.workspace }}/artifacts/${{ matrix.shell }}"
+
+      - name: Upload validation results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: validation-${{ matrix.shell }}
+          path: artifacts/${{ matrix.shell }}/
+          retention-days: 14
+          if-no-files-found: warn
