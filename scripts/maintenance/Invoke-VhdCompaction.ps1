@@ -9,15 +9,19 @@ param(
 # Stop the image's WSL/Docker owner manually. No processes are stopped here.
 if (-not $PSCmdlet.ShouldProcess($VhdPath, 'Compact the explicit VHD using a temporary read-only attachment; write result log')) { return }
 $null = Get-MaintenanceVhdPreflight -Path $VhdPath
-$LogPath = New-MaintenanceLogPath -Operation 'vhd-compaction' -LogPath $LogPath
+$log = $null
 try {
-    Write-MaintenanceLog -LogPath $LogPath -Start -Message "=== Compact started $(Get-Date) ==="
+    $log = Open-MaintenanceLog -LogPath (New-MaintenanceLogPath -Operation 'vhd-compaction' -LogPath $LogPath)
+    Write-MaintenanceLog -Log $log -Start -Message "=== Compact started $(Get-Date) ==="
     $result = Invoke-VhdCompaction -VhdPath $VhdPath -Confirm:$false
-    Write-MaintenanceLog -LogPath $LogPath -Message $result.Output
-    Write-MaintenanceLog -LogPath $LogPath -Message ('VHD now: {0:N2} GB' -f ($result.Length / 1GB))
-    Write-MaintenanceLog -LogPath $LogPath -Message "=== Done $(Get-Date) ==="
+    Write-MaintenanceLog -Log $log -Message $result.Output
+    Write-MaintenanceLog -Log $log -Message ('VHD now: {0:N2} GB' -f ($result.Length / 1GB))
+    Write-MaintenanceLog -Log $log -Message "=== Done $(Get-Date) ==="
 }
 catch {
-    Write-MaintenanceFailure -LogPath $LogPath -Failure $_
+    if ($null -ne $log) { Write-MaintenanceFailure -Log $log -Failure $_ }
     throw
+}
+finally {
+    if ($null -ne $log) { Close-MaintenanceLog -Log $log }
 }

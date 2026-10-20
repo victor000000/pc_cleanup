@@ -13,21 +13,25 @@ if (-not $PSCmdlet.ShouldProcess($VhdPath, 'Disable hibernation, set only C: pag
 # attached or busy image BEFORE powercfg, pagefile updates, or log creation.
 Assert-MaintenanceWmiAvailable
 $null = Get-MaintenanceVhdPreflight -Path $VhdPath
-$LogPath = New-MaintenanceLogPath -Operation 'system-cleanup' -LogPath $LogPath
+$log = $null
 try {
-    Write-MaintenanceLog -LogPath $LogPath -Start -Message "=== System cleanup started $(Get-Date) ==="
+    $log = Open-MaintenanceLog -LogPath (New-MaintenanceLogPath -Operation 'system-cleanup' -LogPath $LogPath)
+    Write-MaintenanceLog -Log $log -Start -Message "=== System cleanup started $(Get-Date) ==="
     $power = Invoke-MaintenanceNativeCommand -FileName 'powercfg.exe' -ArgumentList @('/h', 'off') -Confirm:$false
-    Write-MaintenanceLog -LogPath $LogPath -Message "powercfg exit=$($power.ExitCode)`r`n$($power.Output)"
+    Write-MaintenanceLog -Log $log -Message "powercfg exit=$($power.ExitCode)`r`n$($power.Output)"
 
     $pagefile = Set-CPageFileSize -InitialSizeMB 16384 -MaximumSizeMB 32768 -Confirm:$false
-    Write-MaintenanceLog -LogPath $LogPath -Message $pagefile
+    Write-MaintenanceLog -Log $log -Message $pagefile
 
     $result = Invoke-VhdCompaction -VhdPath $VhdPath -Confirm:$false
-    Write-MaintenanceLog -LogPath $LogPath -Message $result.Output
-    Write-MaintenanceLog -LogPath $LogPath -Message ('VHD now: {0:N2} GB' -f ($result.Length / 1GB))
-    Write-MaintenanceLog -LogPath $LogPath -Message "=== Done $(Get-Date) ==="
+    Write-MaintenanceLog -Log $log -Message $result.Output
+    Write-MaintenanceLog -Log $log -Message ('VHD now: {0:N2} GB' -f ($result.Length / 1GB))
+    Write-MaintenanceLog -Log $log -Message "=== Done $(Get-Date) ==="
 }
 catch {
-    Write-MaintenanceFailure -LogPath $LogPath -Failure $_
+    if ($null -ne $log) { Write-MaintenanceFailure -Log $log -Failure $_ }
     throw
+}
+finally {
+    if ($null -ne $log) { Close-MaintenanceLog -Log $log }
 }

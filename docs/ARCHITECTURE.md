@@ -14,7 +14,7 @@ The project intentionally uses small dot-sourced libraries rather than introduci
 
 ## State-changing operations
 
-User entrypoints use `SupportsShouldProcess` and high-impact confirmation. Approval of a compound operation is explicit, but it does not make independent steps transactional. Helpers preserve their narrower guarantees: identity revalidation, owned attachment cleanup, and best-effort pagefile rollback.
+User entrypoints use `SupportsShouldProcess` and high-impact confirmation. Logs are acquired atomically as new files and retained as owned streams until `finally` closes them; no failure path reopens a rejected caller-controlled path. Approval of a compound operation is explicit, but it does not make independent steps transactional. Helpers preserve their narrower guarantees: identity revalidation, owned attachment cleanup, and best-effort pagefile rollback.
 
 `finally` is failure-path cleanup, not protection against process termination, power loss, concurrent device replacement, or driver bugs. Native commands and actual driver behavior require separately approved manual validation.
 

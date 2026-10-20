@@ -29,10 +29,9 @@ BeforeAll {
     }
     function Invoke-TestNative {
         param([Parameter(ValueFromRemainingArguments = $true)]$Arguments)
-        # Simulate the local LASTEXITCODE behavior of a native process, not one
-        # of the actual executables. Do not alter user/global preferences.
+        # Match the automatic global status updated by native applications.
         if ($null -ne $script:FakeExitCode) {
-            Set-Variable -Name LASTEXITCODE -Scope 1 -Value $script:FakeExitCode
+            $global:LASTEXITCODE = $script:FakeExitCode
         }
         'synthetic native output'
     }
@@ -592,6 +591,7 @@ Describe 'Guarded administrator entrypoints' {
     }
     It 'all four wrappers log Done only after successful mocked operations' {
         foreach ($name in $script:WrapperNames) {
+            $script:Log = Join-Path $TestDrive (([guid]::NewGuid().ToString()) + '.log')
             & (Join-Path $script:WrapperRoot $name) -VhdPath 'C:\synthetic.vhdx' -LogPath $script:Log -Confirm:$false
             [IO.File]::ReadAllText($script:Log) | Should -Match '=== Done '
             [IO.File]::ReadAllText($script:Log) | Should -Not -Match 'FAILED'
@@ -603,6 +603,7 @@ Describe 'Guarded administrator entrypoints' {
     It 'all four wrappers throw and log FAILED rather than Done on compaction failure' {
         Mock Invoke-VhdCompaction { throw 'synthetic compact failure' }
         foreach ($name in $script:WrapperNames) {
+            $script:Log = Join-Path $TestDrive (([guid]::NewGuid().ToString()) + '.log')
             { & (Join-Path $script:WrapperRoot $name) -VhdPath 'C:\synthetic.vhdx' -LogPath $script:Log -Confirm:$false } |
                 Should -Throw '*synthetic compact failure*'
             [IO.File]::ReadAllText($script:Log) | Should -Match 'FAILED'
@@ -719,6 +720,7 @@ Describe 'Guarded administrator entrypoints' {
     It 'never writes Done or mutates when the initial log write fails' {
         Mock Write-MaintenanceLog { throw 'synthetic initial log failure' }
         foreach ($name in $script:WrapperNames) {
+            $script:Log = Join-Path $TestDrive (([guid]::NewGuid().ToString()) + '.log')
             { & (Join-Path $script:WrapperRoot $name) -VhdPath 'C:\synthetic.vhdx' -LogPath $script:Log -Confirm:$false -WarningAction SilentlyContinue } |
                 Should -Throw '*initial log failure*'
         }
@@ -795,25 +797,30 @@ Describe 'Preflight ordering and engine support' {
 }
 
 Describe 'Default log naming and literal custom paths' {
-    It 'allocates unique repository-local log names without opening a file' {
-        Mock Test-Path { $false }
-        Mock New-Item {}
+    It 'allocates unique repository-local log names without creating directories or files' {
+        Mock New-Item { throw 'log naming must not create directories' }
         $first = New-MaintenanceLogPath -Operation 'synthetic-test'
         $second = New-MaintenanceLogPath -Operation 'synthetic-test'
         $first | Should -Not -Be $second
         $first | Should -Match '\\.local\\logs\\synthetic-test-\d{8}-\d{6}-\d{3}-[a-f0-9]{32}\.log$'
         (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $first))) | Should -Be $ProjectRoot
-        Should -Invoke New-Item -Times 2 -Exactly -ParameterFilter { $ItemType -eq 'Directory' }
+        Should -Invoke New-Item -Times 0 -Exactly
     }
     It 'creates a custom log parent and preserves brackets as literal file characters' {
-        $log = Join-Path $TestDrive 'new-log-parent\literal [one].log'
-        New-MaintenanceLogPath -Operation 'synthetic-test' -LogPath $log | Should -Be $log
-        Write-MaintenanceLog -LogPath $log -Start -Message 'exact log'
-        [IO.File]::ReadAllText($log).Trim() | Should -Be 'exact log'
+        $path = Join-Path $TestDrive 'new-log-parent\literal [one].log'
+        New-MaintenanceLogPath -Operation 'synthetic-test' -LogPath $path | Should -Be $path
+        $log = Open-MaintenanceLog -LogPath $path
+        try { Write-MaintenanceLog -Log $log -Start -Message 'exact log' }
+        finally { Close-MaintenanceLog -Log $log }
+        [IO.File]::ReadAllText($path).Trim() | Should -Be 'exact log'
     }
     It 'does not replace primary errors when log failure warnings are configured to Stop' {
-        Mock Write-MaintenanceLog { throw 'synthetic log failure' }
-        { Write-MaintenanceFailure -LogPath 'synthetic.log' -Failure 'primary error' -WarningAction Stop } | Should -Not -Throw
+        $log = Open-MaintenanceLog -LogPath (Join-Path $TestDrive 'failure-warning.log')
+        try {
+            Mock Write-MaintenanceLog { throw 'synthetic log failure' }
+            { Write-MaintenanceFailure -Log $log -Failure 'primary error' -WarningAction Stop } | Should -Not -Throw
+        }
+        finally { Close-MaintenanceLog -Log $log }
     }
 }
 

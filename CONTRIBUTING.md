@@ -32,6 +32,7 @@ All configured lint diagnostics and all failed/discovery/empty/skipped/unrun tes
 - Use Pester TestDrive for files and remove junctions explicitly without traversing their targets.
 - Disable TestRegistry; mock application registry adapters.
 - Test both success and failure cleanup, confirmation races, native errors, and `-WhatIf` without mutation.
+- Tests for native status propagation may launch fixed, harmless `cmd.exe` exit/echo fixtures through a mocked executable resolver; never substitute real maintenance tools.
 - Do not run operational entrypoints as import smoke tests. Inspect metadata/AST or invoke them with disposable targets and mocked boundaries.
 
 Coverage-enabled runs enforce the **90% command-coverage minimum** in `tools/Quality.psd1`, established after both engines measured above 92%. CI always uses `-Coverage`. A missing safety assertion is more important than a numerical target; do not relax the threshold or remove instrumented helpers to conceal regressions.

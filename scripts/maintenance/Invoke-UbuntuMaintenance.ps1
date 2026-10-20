@@ -9,24 +9,28 @@ param(
 # Stop the WSL distribution yourself. No distro discovery or automatic shutdown.
 if (-not $PSCmdlet.ShouldProcess($VhdPath, 'Compact the explicit VHD, run DISM analysis and component cleanup, and write result log')) { return }
 $null = Get-MaintenanceVhdPreflight -Path $VhdPath
-$LogPath = New-MaintenanceLogPath -Operation 'ubuntu-maintenance' -LogPath $LogPath
+$log = $null
 try {
-    Write-MaintenanceLog -LogPath $LogPath -Start -Message "=== Started $(Get-Date) ==="
+    $log = Open-MaintenanceLog -LogPath (New-MaintenanceLogPath -Operation 'ubuntu-maintenance' -LogPath $LogPath)
+    Write-MaintenanceLog -Log $log -Start -Message "=== Started $(Get-Date) ==="
     $result = Invoke-VhdCompaction -VhdPath $VhdPath -Confirm:$false
-    Write-MaintenanceLog -LogPath $LogPath -Message $result.Output
-    Write-MaintenanceLog -LogPath $LogPath -Message ('VHD now: {0:N2} GB' -f ($result.Length / 1GB))
+    Write-MaintenanceLog -Log $log -Message $result.Output
+    Write-MaintenanceLog -Log $log -Message ('VHD now: {0:N2} GB' -f ($result.Length / 1GB))
 
-    Write-MaintenanceLog -LogPath $LogPath -Message '--- DISM AnalyzeComponentStore ---'
+    Write-MaintenanceLog -Log $log -Message '--- DISM AnalyzeComponentStore ---'
     $analysis = Invoke-MaintenanceNativeCommand -FileName 'dism.exe' `
         -ArgumentList @('/online', '/cleanup-image', '/analyzecomponentstore') -Confirm:$false
-    Write-MaintenanceLog -LogPath $LogPath -Message $analysis.Output
-    Write-MaintenanceLog -LogPath $LogPath -Message '--- DISM StartComponentCleanup ---'
+    Write-MaintenanceLog -Log $log -Message $analysis.Output
+    Write-MaintenanceLog -Log $log -Message '--- DISM StartComponentCleanup ---'
     $cleanup = Invoke-MaintenanceNativeCommand -FileName 'dism.exe' `
         -ArgumentList @('/online', '/cleanup-image', '/startcomponentcleanup') -Confirm:$false
-    Write-MaintenanceLog -LogPath $LogPath -Message $cleanup.Output
-    Write-MaintenanceLog -LogPath $LogPath -Message "=== Done $(Get-Date) ==="
+    Write-MaintenanceLog -Log $log -Message $cleanup.Output
+    Write-MaintenanceLog -Log $log -Message "=== Done $(Get-Date) ==="
 }
 catch {
-    Write-MaintenanceFailure -LogPath $LogPath -Failure $_
+    if ($null -ne $log) { Write-MaintenanceFailure -Log $log -Failure $_ }
     throw
+}
+finally {
+    if ($null -ne $log) { Close-MaintenanceLog -Log $log }
 }

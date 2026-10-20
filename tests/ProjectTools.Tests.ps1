@@ -86,7 +86,11 @@ Describe 'Pester configuration safety' {
         $config.Run.Exit.Value | Should -BeFalse
         $config.TestResult.Enabled.Value | Should -BeTrue
         $config.TestResult.OutputFormat.Value | Should -Be 'NUnitXml'
-        $config.Run.Path.Value | Should -Be (Join-Path $ProjectRoot 'tests')
+        $expected = @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'tests') -Recurse -File |
+            Where-Object { $_.Name.EndsWith('.Tests.ps1', [System.StringComparison]::OrdinalIgnoreCase) } |
+            ForEach-Object { [System.Management.Automation.WildcardPattern]::Escape($_.FullName) })
+        $config.Run.Path.Value.Count | Should -Be $expected.Count
+        @($config.Run.Path.Value | Where-Object { $_ -notin $expected }).Count | Should -Be 0
     }
     It 'limits optional coverage to reusable source, not entrypoints or vendor code' {
         $config = Get-ProjectPesterConfiguration -ProjectRoot $ProjectRoot -OutputPath $TestDrive -Coverage

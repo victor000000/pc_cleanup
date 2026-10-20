@@ -153,9 +153,9 @@ function Invoke-MaintenanceNativeCommand {
     }
     # This is the sole native-process boundary, so tests replace it rather
     # than run tools. A parent approval suppresses only the redundant prompt.
-    $LASTEXITCODE = $null
+    $global:LASTEXITCODE = $null
     $output = @(& $source @ArgumentList 2>&1)
-    $exitCode = $LASTEXITCODE
+    $exitCode = $global:LASTEXITCODE
     $text = ($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
     if ($null -eq $exitCode -or $exitCode -ne 0) {
         $exception = New-Object System.InvalidOperationException(
@@ -381,31 +381,105 @@ function New-MaintenanceLogPath {
         $LogPath = Join-Path $root ('.local\logs\{0}-{1}-{2}.log' -f
             $Operation, (Get-Date -Format 'yyyyMMdd-HHmmss-fff'), ([guid]::NewGuid().ToString('N')))
     }
-    $parent = Split-Path -Parent $LogPath
-    if ($parent -and -not (Test-Path -LiteralPath $parent -PathType Container)) {
-        $null = New-Item -Path $parent -ItemType Directory -Force -ErrorAction Stop
-    }
+    # Naming is side-effect free. Only Open-MaintenanceLog may acquire a file.
     return $LogPath
+}
+
+function Open-MaintenanceLog {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$LogPath)
+
+    # Restrict .NET file access to literal local filesystem paths, not ADS,
+    # device names, provider paths, or wildcard expansion. Brackets are literal.
+    if ($LogPath -notmatch '^[A-Za-z]:[\\/]' -or
+        $LogPath -match '[\x00-\x1f"*?<>|]' -or $LogPath.Substring(2).Contains(':')) {
+        throw 'Specify one absolute local log file path without wildcards or command characters.'
+    }
+    $fullPath = [IO.Path]::GetFullPath($LogPath)
+    if ($fullPath -match '(?i)(^|[\\/])(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|[\\/]|$)' -or
+        $fullPath.EndsWith('.') -or $fullPath.EndsWith(' ')) {
+        throw 'Reserved device names and trailing dots/spaces are not supported for logs.'
+    }
+    $parent = [IO.Path]::GetDirectoryName($fullPath)
+    # Inspect all existing ancestors before creating directories, then inspect
+    # again before acquiring the file. CreateNew remains the no-clobber boundary
+    # even if a parent is swapped or a hard link is introduced concurrently.
+    foreach ($checkAfterCreation in @($false, $true)) {
+        $entry = New-Object IO.DirectoryInfo($parent)
+        while ($null -ne $entry) {
+            if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -and $entry.Exists) {
+                throw "Reparse-point log parent paths are not supported: $LogPath"
+            }
+            $entry = $entry.Parent
+        }
+        if (-not $checkAfterCreation) { $null = [IO.Directory]::CreateDirectory($parent) }
+    }
+
+    $stream = $null
+    $writer = $null
+    try {
+        # NEVER OpenOrCreate/Create/Append. An existing ordinary log, image,
+        # hard link, symlink, or directory must fail without writing any bytes.
+        $stream = [IO.File]::Open($fullPath, [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write, [IO.FileShare]::Read)
+        $writer = New-Object IO.StreamWriter($stream, (New-Object Text.UTF8Encoding($true)))
+        $writer.AutoFlush = $true
+        return [pscustomobject]@{
+            PSTypeName = 'Maintenance.OwnedLog'
+            Path = $fullPath
+            Stream = $stream
+            Writer = $writer
+        }
+    }
+    catch {
+        $failure = $_
+        try {
+            try { if ($null -ne $writer) { $writer.Dispose() } }
+            finally { if ($null -ne $stream) { $stream.Dispose() } }
+        }
+        catch { Write-Warning "Log acquisition cleanup failed: $($_.Exception.Message)" -WarningAction Continue }
+        $PSCmdlet.ThrowTerminatingError($failure)
+    }
 }
 
 function Write-MaintenanceLog {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)]$Log,
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message,
         [switch]$Start
     )
-    if ($Start) { $Message | Out-File -LiteralPath $LogPath -Encoding utf8 -ErrorAction Stop }
-    else { $Message | Out-File -LiteralPath $LogPath -Encoding utf8 -Append -ErrorAction Stop }
+    # Start is retained for callers but never means truncation. Writes always
+    # use the original owned stream; never reopen a caller-controlled path.
+    if ($Log.PSObject.TypeNames -notcontains 'Maintenance.OwnedLog' -or
+        $null -eq $Log.Writer -or $null -eq $Log.Stream -or -not $Log.Stream.CanWrite) {
+        throw 'An open owned maintenance log is required; path-based writes are not supported.'
+    }
+    $Log.Writer.WriteLine($Message)
 }
 
 function Write-MaintenanceFailure {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)]$Log,
         [Parameter(Mandatory = $true)]$Failure
     )
-    # Logging must never replace the original terminating error.
-    try { Write-MaintenanceLog -LogPath $LogPath -Message "=== FAILED $(Get-Date): $Failure ===" }
+    # Logging must never replace the original terminating error, and must never
+    # fall back to appending to a path whose initial acquisition was rejected.
+    try { Write-MaintenanceLog -Log $Log -Message "=== FAILED $(Get-Date): $Failure ===" }
     catch { Write-Warning "Failure log could not be written: $($_.Exception.Message)" -WarningAction Continue }
+}
+
+function Close-MaintenanceLog {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)]$Log)
+
+    # Each write was flushed already. Cleanup warnings cannot mask a primary
+    # operation error, even when WarningPreference is Stop.
+    try {
+        try { if ($null -ne $Log.Writer) { $Log.Writer.Dispose() } }
+        finally { if ($null -ne $Log.Stream) { $Log.Stream.Dispose() } }
+    }
+    catch { Write-Warning "Log handle cleanup failed: $($_.Exception.Message)" -WarningAction Continue }
+    finally { $Log.Writer = $null; $Log.Stream = $null }
 }

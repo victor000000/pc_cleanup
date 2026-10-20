@@ -49,6 +49,12 @@ function Import-ProjectDependency {
     )
 
     $manifest = Get-DevelopmentDependencyPath -ProjectRoot $ProjectRoot -Name $Name
+    # Import-Module has no LiteralPath parameter. Escaping its manifest name is
+    # insufficient: derived RootModule/NestedModules paths are expanded again.
+    # Reject these locations before executing any (potentially sibling) module.
+    if ($manifest.IndexOfAny([char[]]'[]*?`') -ge 0) {
+        throw 'Pinned dependency import does not support wildcard or backtick characters in the project path. Move the project to a literal-safe directory before running validation.'
+    }
     Import-Module -Name $manifest -Force -Global -ErrorAction Stop
 }
 
@@ -60,8 +66,17 @@ function Get-ProjectPesterConfiguration {
         [switch]$Coverage
     )
 
+    # Pester 5.5 expands Run.Path as wildcards, then re-expands paths during
+    # execution on Windows PowerShell. Enumerate literally and refuse ambiguous
+    # locations before any tests can execute from an unchecked sibling.
+    $testFiles = @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'tests') -Recurse -File -ErrorAction Stop |
+        Where-Object { $_.Name.EndsWith('.Tests.ps1', [System.StringComparison]::OrdinalIgnoreCase) })
+    if ($testFiles.Count -eq 0) { throw 'Test discovery failed: no literal *.Tests.ps1 files were found.' }
+    if (@($testFiles | Where-Object { $_.FullName.IndexOfAny([char[]]'[]*?`') -ge 0 }).Count -gt 0) {
+        throw 'Test discovery does not support wildcard or backtick characters in test paths with the pinned Pester runtime. Move or rename the tests before running validation.'
+    }
     $config = New-PesterConfiguration
-    $config.Run.Path = Join-Path $ProjectRoot 'tests'
+    $config.Run.Path = @($testFiles | ForEach-Object { [System.Management.Automation.WildcardPattern]::Escape($_.FullName) })
     $config.Run.PassThru = $true
     $config.Run.Exit = $false
     $config.TestRegistry.Enabled = $false
@@ -71,8 +86,17 @@ function Get-ProjectPesterConfiguration {
     $config.Output.Verbosity = 'Normal'
     $config.CodeCoverage.Enabled = [bool]$Coverage
     if ($Coverage) {
-        $config.CodeCoverage.Path = @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'src') -Recurse -File |
-            Where-Object { $_.Extension -eq '.ps1' } | Select-Object -ExpandProperty FullName)
+        $coverageFiles = @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'src') -Recurse -File -ErrorAction Stop |
+            Where-Object { $_.Extension -eq '.ps1' })
+        # An empty Path enables Pester's convention-based fallback coverage scope.
+        if ($coverageFiles.Count -eq 0) { throw 'Coverage discovery failed: no literal source .ps1 files were found.' }
+        # Pester resolves coverage paths once, then passes raw filenames to
+        # Set-PSBreakpoint, which expands them again. Do not report bogus zero
+        # coverage (or instrument a sibling) for unsupported source locations.
+        if (@($coverageFiles | Where-Object { $_.FullName.IndexOfAny([char[]]'[]*?`') -ge 0 }).Count -gt 0) {
+            throw 'Coverage does not support wildcard or backtick characters in source paths with the pinned Pester breakpoint backend. Move or rename the source before running coverage.'
+        }
+        $config.CodeCoverage.Path = @($coverageFiles | ForEach-Object { [System.Management.Automation.WildcardPattern]::Escape($_.FullName) })
         $config.CodeCoverage.OutputFormat = 'JaCoCo'
         $config.CodeCoverage.OutputPath = Join-Path $OutputPath 'coverage.xml'
         $quality = Import-PowerShellDataFile -LiteralPath (Join-Path $ProjectRoot 'tools\Quality.psd1') -ErrorAction Stop
@@ -121,8 +145,10 @@ function Invoke-ProjectLint {
     )
 
     Import-ProjectDependency -ProjectRoot $ProjectRoot -Name PSScriptAnalyzer
+    # PSSA expands -Path; settings accept a hashtable, avoiding path expansion.
+    $settings = Import-PowerShellDataFile -LiteralPath (Join-Path $ProjectRoot 'PSScriptAnalyzerSettings.psd1') -ErrorAction Stop
     $findings = @(foreach ($file in (Get-ProjectOwnedFile -ProjectRoot $ProjectRoot -ProductionOnly)) {
-        Invoke-ScriptAnalyzer -Path $file.FullName -Settings (Join-Path $ProjectRoot 'PSScriptAnalyzerSettings.psd1') -ErrorAction Stop
+        Invoke-ScriptAnalyzer -Path ([System.Management.Automation.WildcardPattern]::Escape($file.FullName)) -Settings $settings -ErrorAction Stop
     })
     ConvertTo-Json -InputObject @($findings | Select-Object RuleName, Severity, Message, ScriptName, Line, Column) -Depth 5 |
         Set-Content -LiteralPath (Join-Path $OutputPath 'lint.json') -Encoding UTF8

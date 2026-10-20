@@ -52,9 +52,11 @@ Include helper coverage:
 pwsh -NoProfile -NonInteractive -File ./Test.ps1 -Coverage
 ```
 
-Results are written under `artifacts/ps-5` or `artifacts/ps-7`. The runner never downloads dependencies. Missing tools, lint diagnostics, failed discovery, zero passing tests, skipped tests, and unrun tests fail the gate. `-SkipLint` is for local diagnosis only; CI uses the complete gate.
+Results are written under `artifacts/ps-5` or `artifacts/ps-7`. Keep the development checkout path free of wildcard characters such as `[` and `]`: PowerShell's module loader can re-expand these while loading manifests, so validation refuses such dependency locations rather than risk importing a different directory. This restriction does not prohibit bracketed paths as ordinary report inputs.
 
-Tests use disposable files and mocked native, Storage, WMI, network, and registry boundaries. Pester's registry fixture is disabled. When `-Coverage` is enabled, the runner enforces **90% command coverage** over reusable source; CI always enables it. Both engine lanes exceeded 92% when establishing this baseline. Coverage does not prove hardware behavior.
+The runner never downloads dependencies. Missing tools, lint diagnostics, failed discovery, zero passing tests, skipped tests, and unrun tests fail the gate. `-SkipLint` is for local diagnosis only; CI uses the complete gate.
+
+Tests use disposable files and mocked maintenance, Storage, WMI, network, and registry boundaries. A small native-process contract suite launches only fixed, harmless `cmd.exe` exit/echo fixtures; it never runs maintenance executables. Pester's registry fixture is disabled. When `-Coverage` is enabled, the runner enforces **90% command coverage** over reusable source; CI always enables it. Both engine lanes exceeded 92% when establishing this baseline. Coverage does not prove hardware behavior.
 
 ## Read-only reporting
 
@@ -104,7 +106,7 @@ Supported commands:
 | `Set-PagefileAndCompact.ps1` | C: pagefile registry entry plus selected VHD |
 | `Disable-Hibernation.ps1` | Hibernation only |
 
-Maintenance commands require confirmation and may require elevation. `-WhatIf` must not create logs or mutate machine state. Default runtime logs use unique files under `.local/logs`. Successful independent steps are not rolled back if a later step fails; combined maintenance is **not transactional**. Pagefile changes require reboot.
+Maintenance commands require confirmation and may require elevation. `-WhatIf` must not create logs or mutate machine state. Default runtime logs use unique files under `.local/logs`. An explicit `-LogPath` must also name a **new file**: existing destinations are refused, never overwritten or appended to. A successful log acquisition keeps its stream open for the operation, including failure reporting. Successful independent steps are not rolled back if a later step fails; combined maintenance is **not transactional**. Pagefile changes require reboot.
 
 The DiskPart text files under `docs/reference` are deliberately non-runnable templates. Use the guarded wrappers, not `diskpart /s` on those files.
 
