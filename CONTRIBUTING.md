@@ -67,6 +67,22 @@ For documentation-only changes, check relative links, PowerShell example syntax,
 
 ## Repository hygiene and CI
 
-Follow `.editorconfig` and `.gitattributes`: Markdown uses UTF-8/LF; PowerShell uses UTF-8 with BOM/CRLF. Keep local history in `archive`, vendor files and runtime logs in `.local`, dependencies in `.tools`, and test results in `artifacts`. Those directories are ignored. The root Defender JSON outputs currently are not ignored; inspect `git status` and stage deliberately. Do not publish credentials, hardware-specific history, installers, vendor binaries, or local result files.
+Follow `.editorconfig` and `.gitattributes`: Markdown uses UTF-8/LF; PowerShell uses UTF-8 with BOM/CRLF. Keep local history in `archive`, vendor files and runtime logs in `.local`, dependencies in `.tools`, and test results in `artifacts`. Those directories are ignored. The root Defender JSON outputs and installer downloads are also ignored; inspect `git status` and stage deliberately. Do not publish credentials, hardware-specific history, installers, vendor binaries, or local result files.
 
 [Windows CI](.github/workflows/ci.yml) uses `windows-2022`, both engines, pinned action revisions, read-only repository permissions, and `Test.ps1 -Coverage`. It uploads available artifacts after failures. Hosted CI must be observed on GitHub before claiming a hosted run passed; a workflow file or local passing run is insufficient. Publishing and pushing remain separate actions requiring authorization.
+
+## Local environment and deployment scope
+
+When launched from WSL, PowerShell can inherit a `PATHEXT` value that omits
+`.EXE`. `Test.ps1` temporarily adds `.EXE` for its validation process so the
+harmless native exit/echo fixtures execute, then restores the caller's value.
+It does not change user or machine environment settings or maintenance scripts.
+
+CI validates source, lint, unit tests, and coverage in both Windows engines.
+The only network setup is downloading the pinned, SHA-512-verified test modules;
+the test suite does not download data, contact live services, or run maintenance.
+Hardware, administrator-only maintenance, and live service integration are mocked
+and are not certified by a passing CI run.
+
+No deployment target, release publication, or CD workflow is configured. The
+repository distributes source; CI does not deploy it or alter any user's PC.

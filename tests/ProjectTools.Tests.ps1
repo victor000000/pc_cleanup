@@ -98,8 +98,10 @@ Describe 'Pester configuration safety' {
         $config.CodeCoverage.CoveragePercentTarget.Value | Should -Be 90
         $config.CodeCoverage.Path.Value.Count | Should -BeGreaterThan 0
         foreach ($path in $config.CodeCoverage.Path.Value) {
-            $path | Should -Match '[\\/]src[\\/]'
-            $path | Should -Not -Match '[\\/](scripts|archive|\.tools|\.local)[\\/]'
+            $path | Should -BeLike (Join-Path $ProjectRoot 'src\*')
+            $relativePath = $path.Substring($ProjectRoot.Length).TrimStart([char[]]'\/')
+            $relativePath | Should -Match '^src[\\/]'
+            $relativePath | Should -Not -Match '(^|[\\/])(scripts|archive|\.tools|\.local)[\\/]'
         }
     }
 }
