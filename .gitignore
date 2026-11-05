@@ -21,3 +21,10 @@ credentials*
 .DS_Store
 Thumbs.db
 *.tmp
+
+# Local installer downloads and operational results
+*.exe
+*.msi
+defender-startup-result.json
+defender-startup-verification.json
+.claude/

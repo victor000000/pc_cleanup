@@ -1,5 +1,7 @@
 # Layout migration — 2026-10-20
 
+[README](../README.md) · [Current commands](COMMANDS.md) · [Architecture](ARCHITECTURE.md)
+
 Original text/source files were copied into `archive/2026-10-20/source-before-restructure` with a `.txt` suffix and a SHA-256 manifest before moving or modifying them. Snapshots are non-executable references and ignored by Git. Historical results and binaries were moved, not deleted.
 
 ## Command map
@@ -29,7 +31,7 @@ Preserving alias names under `scripts/compat` does **not** preserve old root inv
 
 ## Intentional interface changes
 
-- Reports accept explicit profile/root/app targets instead of assuming a particular user's paths, terminal hash, or WSL distribution ID.
+- Reports accept profile/root/app overrides instead of assuming a particular user's paths, terminal hash, or WSL distribution ID. If omitted, root/profile targets come from the current Windows environment; see the [current defaults and scan scope](COMMANDS.md#reports).
 - All compaction entrypoints require `-VhdPath`; no machine-specific default image is selected.
 - Default logs are unique `.local/logs` files created only after approval, not overwrites of historical evidence.
 - Hibernation is guarded and checked rather than an immediate mutation.
@@ -46,3 +48,7 @@ Preserving alias names under `scripts/compat` does **not** preserve old root inv
 - Test/lint/coverage outputs: `artifacts`.
 
 These ignored assets are intentionally absent from a clean clone and from CI. Tests must not depend on them. No personal course files, market data, databases, backups, or external disks were cleaned during this restructuring.
+
+## Later local additions
+
+The root Defender startup/verification scripts were added separately from this layout migration. They are not legacy aliases or part of standard cleanup. Their JSON outputs remain local, untracked evidence. See the [Defender startup guide](DEFENDER-STARTUP.md) for task persistence, verification limits, and removal.
