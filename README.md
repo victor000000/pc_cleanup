@@ -1,6 +1,6 @@
 # PC Cleanup
 
-Version **0.0.3** — [release design and limitations](docs/RELEASE-0.0.3.md).
+Version **0.0.3** — [original release design](docs/RELEASE-0.0.3.md) and [current documentation audit](docs/DOCUMENTATION-AUDIT-2026-11-07.md).
 
 A Windows PowerShell toolkit for storage reports, USB recovery, and selected Windows/VHD maintenance. Start with a report, inspect the target, and preview maintenance before approving it. File sizes alone do not establish what can be deleted.
 
@@ -38,6 +38,10 @@ Choose the guide for your task:
 | Change reusable helpers or test boundaries | [Architecture](docs/ARCHITECTURE.md) |
 | Find an older script name | [Migration map](docs/MIGRATION.md) |
 
+## Configuration and supported environment
+
+There is no central runtime configuration file, database, service, or credential store. Each entrypoint takes explicit PowerShell parameters; omitted profile/root values use the current Windows environment. `Project.psd1` declares the tool version, not runtime settings. Development pins and quality policy live in `tools/Dependencies.psd1` and `tools/Quality.psd1`. Runtime operation is supported on Windows; running Bash inside WSL does not make Windows Storage/WMI APIs available. This project does not package a Linux filesystem cleanup tool.
+
 ## Preview maintenance
 
 Copy the exact intended USB identity from inventory before selecting an eject target:
@@ -55,7 +59,7 @@ For VHD compaction, select one image explicitly and stop its owner yourself befo
 
 The guarded storage and maintenance commands support `-WhatIf` and confirmation. A preview describes intent; it does not validate every prerequisite or prove a device will accept the operation. To carry out a reviewed operation, omit `-WhatIf` and inspect the confirmation. See the command reference for prerequisites, combined-operation effects, and logs.
 
-The two local Defender scripts have a separate contract: they do **not** support `-WhatIf` or confirmation. Their [guide](docs/DEFENDER-STARTUP.md) documents this exception and the startup task already configured on this PC.
+The two local Defender scripts have a separate contract: they do **not** support `-WhatIf` or confirmation. Their [guide](docs/DEFENDER-STARTUP.md) documents this exception and task behavior and removal procedure.
 
 ## Development quick start
 
@@ -89,4 +93,4 @@ The runner never downloads dependencies. It fails on configured lint diagnostics
 | `.github/workflows/` | Windows PowerShell 5.1 and PowerShell 7 CI configuration |
 | `archive/`, `.local/`, `.tools/`, `artifacts/` | Ignored local history, vendor files/logs, dependencies, and results |
 
-The root Defender scripts and their JSON outputs are local additions in this working tree. They may be absent from a clean clone. The task embeds its action, so removing the checkout does not remove the installed task. Machine-specific results should not be published.
+The root Defender scripts are tracked source and are present in a clean clone. Their generated JSON outputs are ignored. The task embeds its action, so removing the checkout does not remove the installed task. Machine-specific results should not be published.

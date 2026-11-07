@@ -6,7 +6,7 @@ Run the PowerShell examples from the project root on Windows. Imports resolve re
 
 ## Reports
 
-Reports require no elevation and emit formatted text, not CSV/JSON records. They skip links, offline files, and cloud recall placeholders; warnings mean totals are partial. Displayed `GB` values divide logical byte lengths by PowerShell's `1GB` constant (1,073,741,824 bytes). Allocated space and reclaimable space can differ.
+The five legacy reports in this table require no elevation and emit formatted text. The separate [structured review](#structured-cleanup-review-003) emits objects or JSON. They skip links, offline files, and cloud recall placeholders; warnings mean totals are partial. Displayed `GB` values divide logical byte lengths by PowerShell's `1GB` constant (1,073,741,824 bytes). Allocated space and reclaimable space can differ.
 
 | Script in `scripts/reports/` | Parameters and defaults | Scope |
 |---|---|---|
@@ -109,3 +109,34 @@ FilesScanned and LogicalBytesScanned count successfully inspected file metadata.
 include ToolVersion 0.0.3 and SchemaVersion 1. No file contents are read and no
 report files are created. Saving output is an explicit caller action; treat paths
 and metadata as private. See [release design](RELEASE-0.0.3.md) for limitations.
+
+### Schema 1 output contract
+
+The entrypoint returns one report object (or one JSON string), not one pipeline row per candidate. Order is exact `Bytes` descending, then `Path` ascending using PowerShell `Sort-Object`; equal-size ordering is not a cross-locale normalization guarantee. No content hashes, access-time checks, live-owner queries, or duplicate detection are performed.
+
+| Report field | Meaning |
+|---|---|
+| `SchemaVersion`, `ToolVersion` | Integer `1` and version string from `Project.psd1`; schema and tool versions are independent |
+| `RootPath` | Resolved literal filesystem path; relative input uses the PowerShell location |
+| `StartedAtUtc`, `CompletedAtUtc` | Round-trip ISO 8601 UTC timestamps; enumeration is not an atomic snapshot |
+| `ScanStatus` | `Complete` when no warning was observed, otherwise `Partial`; not a process exit code or deletion approval |
+| `WarningCount`, `Warnings`, `WarningsTruncated` | Total warning count, capped string array, and whether warning samples were omitted |
+| `FilesScanned`, `LogicalBytesScanned` | Count and Int64 sum for files whose length and modification metadata were read successfully |
+| `MinimumFileBytes`, `MatchingFileCount` | Inclusive threshold and total matches before selection truncation |
+| `CandidateLimit`, `CandidatesTruncated` | Requested `Top` and whether the match count exceeds it |
+| `Candidates` | Array of at most `Top` records, including empty/single-element cases |
+| `SizeMeaning`, `ReviewRequired` | Explanation of logical-size limits and constant `true` review requirement |
+
+Each candidate has `Path`, exact Int64 `Bytes`, rounded `GiB` (three decimals), `LastWriteTimeUtc`, `Category`, and `ReviewNote`. Categories are extension hints: `VirtualDisk`, `Database`, `InstallerOrExecutable`, `ArchiveOrImage`, `LogOrDump`, or `Other`. They are neither content identification nor permission to remove a file. JSON consumers that use floating-point numbers may lose integer precision above 2^53; retain an integer-capable decoder for exact byte accounting.
+
+The scanner skips reparse, offline, and recall-marked entries and retains readable results after failures. Missing/non-directory roots can produce a Partial report with no candidates. Parameter/provider errors terminate. A zero process exit status or an empty candidate array does not prove completeness. Even `Complete` cannot detect concurrent filesystem changes or establish consistency of an application database. Hard links can be counted repeatedly; compressed/sparse files and VHDs have different allocated sizes.
+
+For a focused pipeline (read-only until the caller explicitly saves output):
+
+```powershell
+$report = .\scripts\reports\Get-CleanupReview.ps1 -RootPath "$env:USERPROFILE\Downloads" -Top 20
+$report | Select-Object ScanStatus, WarningCount, MatchingFileCount, CandidatesTruncated
+$report.Candidates | Select-Object Path, Bytes, Category, ReviewNote
+```
+
+There is no report-to-delete command or automatic cleanup queue. Recheck ownership, live writers, backups, and retention before approving a separate operation. The report contains private path names and warning text; do not publish it unchanged.

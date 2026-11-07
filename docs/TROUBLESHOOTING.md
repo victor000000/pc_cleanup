@@ -8,7 +8,7 @@
 |---|---|
 | `Directory scan incomplete` warning | A path was inaccessible, disappeared, or had excluded attributes. Treat the result as partial; inspect the named path rather than suppressing warnings. |
 | Zero or unexpectedly small totals | Skipped entries can contribute no bytes; logical lengths also differ from allocated/compressed/sparse storage. A zero total does not prove a directory is empty. |
-| Scan takes longer than expected | `-Top` limits displayed rows after traversal. Use `Scan-TopLevel -RootPath <focused-directory>` to narrow the scan; combined reports revisit overlapping trees. |
+| Scan takes longer than expected | `-Top` limits selected/displayed rows, not traversal. Use `Scan-TopLevel -RootPath <focused-directory>` to narrow the scan; combined reports revisit overlapping trees. |
 | Changing `Get-DiskUsage -RootPath` still scans the user profile | Its root and profile targets are independent. Supply both parameters or use a focused report. |
 | Cannot discover current root/profile | Supply the appropriate `-RootPath` or `-ProfilePath` explicitly; do not infer a different user's location. |
 
@@ -55,6 +55,8 @@ For startup-task permissions, stale verification JSON, or protection settings th
 
 ## Observed validation result — 2026-10-21
 
+**Superseded diagnosis (2026-11-07):** the later runner fix at `2e963c2` temporarily adds `.EXE` to an inherited `PATHEXT` that can contain only `.CPL` when launched from WSL. It restores the process value afterward. The 0.0.3 clean-clone suites subsequently passed 466/466 in both engines; see the [documentation audit](DOCUMENTATION-AUDIT-2026-11-07.md#release-status-correction). The dated observations below are retained as history.
+
 The documentation review ran the complete `Test.ps1 -Coverage` gate against unchanged code in both Windows engines. Both runs failed three tests in [NativeBoundary.Tests.ps1](../tests/NativeBoundary.Tests.ps1): accepting zero status, propagating status 7, and capturing stdout with a fresh success status. The native wrapper observed a null exit status in these cases. The tests substitute harmless `cmd.exe` fixtures; no real DISM operation was run.
 
 | Engine | Passed / failed | Lint findings | Command coverage |
@@ -63,3 +65,15 @@ The documentation review ran the complete `Test.ps1 -Coverage` gate against unch
 | PowerShell 7.6.7 | 438 / 3 | 0 | 92.27% |
 
 This is an observed failure, not a diagnosed root cause. Review [Invoke-MaintenanceNativeCommand](../src/VhdMaintenance.ps1) and the native-process fixture before relying on real maintenance behavior. Passing lint and coverage do not override a failing test gate. Local logs and per-engine XML results are under `artifacts/docs-review`; they are ignored and absent from a clean clone. Separate documentation checks resolved local links and parsed all 16 PowerShell examples in both engines; no operational examples were executed.
+
+## Structured review and WSL space
+
+| Symptom | Meaning and next step |
+|---|---|
+| JSON parses but `ScanStatus` is `Partial` | Successful serialization does not establish complete enumeration. Inspect warning count and sample; `-WarningLimit 0` hides samples only. |
+| `CandidatesTruncated` is true while status is `Complete` | More files matched than `Top`; this is selection truncation, independent of enumeration warnings. |
+| Missing/file root returns empty candidates | Inspect status and warnings. An invalid root can return a Partial report rather than terminating. Non-filesystem providers and invalid parameter ranges throw. |
+| JSON output unexpectedly contains private paths | Paths and warning text are part of the contract. Redact them before sharing; scanning does not upload anything. |
+| Removing guest files did not free Windows space | Guest filesystem use, VHD file length, and Windows allocated space are different measures. This toolkit does not discover the owner, remove guest data, trim the guest, or guarantee compaction savings. |
+
+For a review-only request, inventory metadata and stop at the candidate list. A build/cache directory name alone does not prove it is inactive, reproducible, backed up, or no longer needed. Provider snapshots, staging, databases, and recovery checkpoints require application-specific retention and writer review outside this toolkit.

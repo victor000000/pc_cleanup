@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Commands](COMMANDS.md) · [Troubleshooting](TROUBLESHOOTING.md)
 
-This guide describes the two root scripts created for this PC's requested Defender configuration. They are local working-tree additions and may be absent from a clean clone. Disabling these protections increases exposure to malware. Reports, maintenance, development setup, and tests do not invoke these scripts or install this task.
+This guide describes the two root scripts created for this PC's requested Defender configuration. Both scripts are tracked in a clean clone; their generated JSON files are ignored. Their presence does not establish that a task is installed on any machine. Disabling these protections increases exposure to malware. Reports, maintenance, development setup, and tests do not invoke these scripts or install this task.
 
 ## Behavior
 
@@ -51,7 +51,7 @@ Get-ScheduledTaskInfo -TaskName 'Disable Microsoft Defender at startup' |
     Select-Object LastRunTime, LastTaskResult
 ```
 
-The earlier setup test showed successful execution without rebooting. It did not establish behavior across a full reboot or future Windows updates.
+Earlier local setup evidence reported successful execution without rebooting. That machine-specific observation is not a clean-clone prerequisite or evidence of the current task state, behavior across a full reboot, or future Windows updates.
 
 ## Troubleshoot
 
@@ -63,7 +63,7 @@ The earlier setup test showed successful execution without rebooting. It did not
 | Protection remains on or changes later | Inspect task result, current preferences, tamper-protection status, and applicable management policy. Task registration does not prove settings were accepted. |
 | No new JSON output | Check elevation, script errors, and whether the checkout is writable; do not rely on an older result file. |
 
-The root JSON files contain local execution details and currently are not ignored by `.gitignore`. Keep them out of published changes. The code gate can parse/lint the root scripts, but no dedicated test exercises this actual task or a real reboot.
+The root JSON files contain local execution details and are explicitly ignored by `.gitignore`. Keep them out of published changes. The code gate can parse/lint the root scripts, but no dedicated test exercises this actual task or a real reboot.
 
 ## Remove the task and restore its three preferences
 

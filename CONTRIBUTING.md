@@ -86,3 +86,11 @@ and are not certified by a passing CI run.
 
 No deployment target, release publication, or CD workflow is configured. The
 repository distributes source; CI does not deploy it or alter any user's PC.
+
+## Documentation acceptance
+
+Inventory root Markdown, `docs/*.md`, and `docs/reference/*.txt`. Compare canonical guides with actual entrypoint parameter blocks, shared helper behavior, `.gitignore`, manifests, and CI. Inspect native/private checkout differences separately: do not merge private evidence or imply an older checkout contains a new published command. Keep dated release/checkpoint records immutable; put superseding status in a dated documentation audit and link it from current guides.
+
+Check every relative Markdown link and heading anchor, parse every fenced PowerShell example in both engines without executing it, and inspect local-script invocation parameters against the target AST. Validate bootstrap pins, engine requirements, output paths, coverage policy, and command names from source. External URLs are references, not automatically crawled by offline checks. Commands involving device mutation, task setup, rollback, active network scans, or maintenance are syntax-checked only. A fixture-only report can verify the documented object/JSON shape without scanning user data.
+
+There is no dedicated Markdown gate in CI. Documentation checks are a separate manual acceptance step; `Test.ps1 -Coverage` remains the source gate in both engine lanes. Record exact scope and limitations in the [documentation audit](docs/DOCUMENTATION-AUDIT-2026-11-07.md), and require final published-SHA CI rather than treating a previous hosted run as acceptance of new documentation.

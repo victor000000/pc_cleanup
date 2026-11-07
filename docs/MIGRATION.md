@@ -51,4 +51,8 @@ These ignored assets are intentionally absent from a clean clone and from CI. Te
 
 ## Later local additions
 
-The root Defender startup/verification scripts were added separately from this layout migration. They are not legacy aliases or part of standard cleanup. Their JSON outputs remain local, untracked evidence. See the [Defender startup guide](DEFENDER-STARTUP.md) for task persistence, verification limits, and removal.
+The root Defender startup/verification scripts were added separately from this layout migration. They are tracked source, not legacy aliases or part of standard cleanup. Their JSON outputs remain local, ignored evidence. See the [Defender startup guide](DEFENDER-STARTUP.md) for task persistence, verification limits, and removal.
+
+## Version 0.0.3 interface additions
+
+`Project.psd1` now declares version 0.0.3. Existing report names remain supported. `Get-CleanupReview.ps1` adds an explicit-root object/JSON interface; it is not a replacement with identical output. Its threshold is inclusive and ties sort by path, while `Scan-LargeFiles` preserves strict ordinary-file thresholds and encounter-order ties. See the [structured contract](COMMANDS.md#structured-cleanup-review-003) before migrating consumers. There is no persistent database or configuration schema to migrate. Ignored local archives are historical assets, not distributed backups.

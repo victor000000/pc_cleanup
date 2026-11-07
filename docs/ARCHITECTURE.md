@@ -5,6 +5,7 @@
 ## Boundaries
 
 - `src/DirectoryScan.ps1`: metadata traversal and report assembly; skips reparse/recall/offline entries and reports partial reads visibly.
+- `src/DirectoryReview.ps1`: schema/versioned review aggregation with embedded warnings and bounded candidate retention; imports the shared scanner, not maintenance helpers.
 - `src/UsbEject.ps1`: stable disk identity validation, PnP mapping, and a single checked native eject request. Native calls are behind replaceable PowerShell adapters.
 - `src/DiskRecovery.ps1`: identity-based online and drive-letter recovery, including confirmation-time revalidation and collision refusal.
 - `src/VhdMaintenance.ps1`: VHD preflight/owned attachment lifecycle, checked native commands, pagefile changes/rollback, and maintenance logging.
@@ -45,3 +46,31 @@ Generated artifacts are per-engine NUnit XML, lint JSON, environment metadata, a
 `Get-DirectoryLargeFileReport` consumes one metadata traversal and retains at most `Top` rows in each of its image and ordinary-file categories. Binary insertion orders retained rows by exact Int64 byte length; equal sizes retain encounter order. Each category temporarily holds at most `Top + 1` rows during insertion. Candidate storage is therefore proportional to `Top`, with at most `Top` shifts per accepted row. The scanner still keeps its directory traversal stack, and the report still visits all readable entries.
 
 Images qualify regardless of size; ordinary files must be strictly larger than `MinimumFileBytes`. Unreadable entries and skipped links retain the existing partial-scan warning behavior. Selection does not estimate reclaimable space or authorize maintenance. Tests cover category separation, cutoff ties, empty results, exact large integer ordering, a single traversal, and partial-scan retention.
+
+## Data flow and rationale
+
+```mermaid
+flowchart TD
+    R[Explicit report parameters] --> S[Metadata scanner]
+    S --> L[Legacy formatted reports]
+    S --> A[Structured aggregator]
+    A --> O[One object or JSON document]
+    U[Explicit maintenance target] --> P[ShouldProcess approval]
+    P --> V[Capability and ownership validation]
+    V --> M[Checked OS operation and owned log]
+    M --> F[Finally releases owned resources]
+```
+
+Report output never feeds an automatic mutation step. The structured aggregator merges the scanner warning stream into its input stream to count all warnings while retaining only `WarningLimit` samples; candidates use a bounded list with sorting after overflow. Counts describe all readable metadata, not just retained rows. Candidate storage is O(Top + WarningLimit); directory traversal still has its own stack and no duration bound. The independent legacy selector uses binary insertion and encounter-order ties to preserve its established interface. Unifying those tie/threshold rules would silently change consumers, so the two contracts remain explicit.
+
+The object schema is the integration boundary; `src` functions are internal dot-sourced helpers, not a versioned public module API. See the [field contract](COMMANDS.md#schema-1-output-contract). There is no backend, persistent application database, authentication system, telemetry, package installer, or automatic report retention. Runtime state consists of explicit OS changes, newly acquired logs, and the separate Defender task. JSON serialization does not persist state.
+
+## Ownership and failure boundaries
+
+USB mutation resolves one non-system USB identity and revalidates its mapping after confirmation. A successful eject result means Windows accepted the request, not independent proof the device is physically absent. Online/letter commands verify readback and refuse ambiguous partitions or occupied letters.
+
+VHD preflight validates the path, required Storage command parameters, detached state, and exclusive access. Compaction rechecks and acquires a read-only attachment without a drive letter; its `finally` releases only that attachment. Exclusive access is a point-in-time check, not a permanent concurrency lock. The native adapter checks exit status; DiskPart compaction also requires a recognized success acknowledgement. Logs retain diagnostics but are not signed forensic receipts.
+
+WMI pagefile updates snapshot the existing automatic-management flag and exactly one C: setting, verify readback, and attempt rollback on failure. The registry alternative snapshots `PagingFiles`, changes only one C: entry, and verifies each string. Rollback can itself fail and is reported as a warning. Neither mechanism rolls back an earlier successful hibernation change or a later independent compaction failure. Operators must inspect current state before retrying.
+
+The toolkit inventories local files; it does not own provider acquisition, market-data retention, broker execution, or research acceptance. Those application owners must decide which snapshots, checkpoints, caches, or results can be removed. The Docker/Ubuntu reference filenames are historical labels, not deployed services or proof of a current runtime installation.
