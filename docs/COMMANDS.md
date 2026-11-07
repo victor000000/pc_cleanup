@@ -16,7 +16,7 @@ Reports require no elevation and emit formatted text, not CSV/JSON records. They
 | [Scan-AppData.ps1](../scripts/reports/Scan-AppData.ps1) | `-ProfilePath` = current profile; `-AppPath` = no extra locations; `-Top 25` | All three AppData branches plus each supplied application directory |
 | [Get-DiskUsage.ps1](../scripts/reports/Get-DiskUsage.ps1) | `-RootPath` = system-drive root; `-ProfilePath` = current profile; `-Top 25` | Combined root/profile overview, selected Windows/temp/recycle locations, and profile files over 1GB |
 
-`-Top` accepts 1–1000 and limits rows in each section after scanning/sorting. It does not cap traversal. Thresholds use **strictly greater than**, not greater than or equal to. In `Scan-TopLevel`, the threshold filters root files, not directories. Profile/AppData root-file sections use the shared 50MB default. `Get-DiskUsage` uses 100MB for system-root files and 50MB for profile-root files.
+`-Top` accepts 1–1000 and limits displayed rows in each section. `Scan-LargeFiles` retains only the largest `Top` candidates per category during its single traversal, ordered by exact bytes; equal sizes keep encounter order. It does not cap traversal. These legacy report thresholds use **strictly greater than**, not greater than or equal to. In `Scan-TopLevel`, the threshold filters root files, not directories. Profile/AppData root-file sections use the shared 50MB default. `Get-DiskUsage` uses 100MB for system-root files and 50MB for profile-root files.
 
 `Get-DiskUsage -RootPath ...` still scans the current profile unless `-ProfilePath` is also supplied. Use `Scan-TopLevel` when only one root should be scanned. Combined reports can traverse overlapping trees repeatedly; prefer a focused report when speed matters.
 
@@ -93,3 +93,19 @@ The Handle wrapper supports `-WhatIf` and confirmation. Real execution verifies 
 ## Local Defender setup
 
 The root `configure-defender-startup.ps1` and `verify-defender-startup.ps1` are separate local scripts with no parameters, `-WhatIf`, or confirmation. They are not called by reports, maintenance, or the test runner. Use the [Defender startup guide](DEFENDER-STARTUP.md) for the exact task behavior, verification, local outputs, and removal procedure.
+
+## Structured cleanup review (0.0.3)
+
+`Get-CleanupReview.ps1 -RootPath <literal filesystem path>` returns one object.
+`-Format Json` emits one JSON document, with warnings inside it. `-MinimumFileBytes`
+is inclusive (default 100MB); `-Top` is 1–1000 (default 40); `-WarningLimit` is
+0–1000 (default 20). Relative paths use the current PowerShell filesystem location.
+
+`ScanStatus` is Partial if any path or metadata was skipped. `WarningCount` counts
+all warnings; `WarningsTruncated` marks a shortened sample. `MatchingFileCount`
+counts all matching files; `CandidatesTruncated` marks a shortened candidate list.
+FilesScanned and LogicalBytesScanned count successfully inspected file metadata.
+`Candidates` and `Warnings` stay arrays even with zero or one element. Results
+include ToolVersion 0.0.3 and SchemaVersion 1. No file contents are read and no
+report files are created. Saving output is an explicit caller action; treat paths
+and metadata as private. See [release design](RELEASE-0.0.3.md) for limitations.

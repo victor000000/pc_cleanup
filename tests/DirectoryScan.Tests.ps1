@@ -259,7 +259,7 @@ Describe 'Report scanner integration (parse only; never execute the reports)' {
         $source | Should -Not -Match 'function Get-DirSize|EnumerateFiles|EnumerateDirectories|Get-ChildItem[^\r\n]+-Recurse'
     }
 
-    It 'Scan-LargeFiles traverses the selected profile only once for both large-file reports' {
+    It 'Scan-LargeFiles delegates both categories to one bounded report scan' {
         $path = Join-Path $ProjectRoot 'scripts\reports\Scan-LargeFiles.ps1'
         $tokens = $null
         $parseErrors = $null
@@ -267,9 +267,9 @@ Describe 'Report scanner integration (parse only; never execute the reports)' {
         $calls = @($ast.FindAll({
             param($node)
             $node -is [System.Management.Automation.Language.CommandAst] -and
-                $node.GetCommandName() -eq 'Get-DirectoryScanFiles'
+                $node.GetCommandName() -eq 'Get-DirectoryLargeFileReport'
         }, $true))
         $calls.Count | Should -Be 1
-        $calls[0].Extent.Text | Should -Match ([regex]::Escape('-Path $ProfilePath'))
+        $calls[0].Extent.Text | Should -Match ([regex]::Escape('-Path $ProfilePath -MinimumFileBytes $MinimumFileBytes -Top $Top'))
     }
 }

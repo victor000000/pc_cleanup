@@ -243,6 +243,90 @@ Describe 'Shared report formatting retains exact ordering and partial results' {
     }
 }
 
+Describe 'Bounded large-file selection' {
+    BeforeEach {
+        Mock Get-DirectoryScanFiles { throw 'A mocked metadata stream is required.' }
+    }
+
+    It 'matches a full sort while retaining only Top rows in each category' {
+        Mock Get-DirectoryScanFiles {
+            foreach ($size in 3, 20, 9, 100, 7, 40, 12, 80) {
+                foreach ($extension in '.VHDX', '.bin') {
+                    [pscustomobject]@{
+                        Name = "$size$extension"; FullName = "$size$extension"
+                        Length = [long]$size; Extension = $extension
+                        LastWriteTime = [datetime]'2026-01-01'
+                    }
+                }
+            }
+        }
+        $result = Get-DirectoryLargeFileReport -Path 'mock-only' -Top 3 -MinimumFileBytes 10
+        @($result.Images).Count | Should -Be 3
+        @($result.OtherFiles).Count | Should -Be 3
+        $result.Images.Bytes | Should -Be @(100, 80, 40)
+        $result.OtherFiles.Bytes | Should -Be @(100, 80, 40)
+        Should -Invoke Get-DirectoryScanFiles -Times 1 -Exactly -ParameterFilter { $Path -eq 'mock-only' }
+    }
+
+    It 'keeps small images, excludes ordinary files at the threshold and preserves ties at the cutoff' {
+        Mock Get-DirectoryScanFiles {
+            foreach ($item in @(
+                @{ Name = 'small.ISO'; Bytes = 0; Extension = '.ISO' }
+                @{ Name = 'equal.bin'; Bytes = 10; Extension = '.bin' }
+                @{ Name = 'first.bin'; Bytes = 11; Extension = '.bin' }
+                @{ Name = 'second.bin'; Bytes = 11; Extension = '.bin' }
+                @{ Name = 'third.bin'; Bytes = 11; Extension = '.bin' }
+            )) {
+                [pscustomobject]@{
+                    Name = $item.Name; FullName = $item.Name; Length = [long]$item.Bytes
+                    Extension = $item.Extension; LastWriteTime = [datetime]'2026-01-01'
+                }
+            }
+        }
+        $result = Get-DirectoryLargeFileReport -Path 'mock-only' -Top 2 -MinimumFileBytes 10
+        @($result.Images).Count | Should -Be 1
+        $result.Images[0].Bytes | Should -Be 0
+        $result.OtherFiles.Name | Should -Be @('first.bin', 'second.bin')
+    }
+
+    It 'retains exact Int64 ordering above floating point precision with Top one' {
+        Mock Get-DirectoryScanFiles {
+            foreach ($size in 9007199254740992L, 9007199254740993L) {
+                [pscustomobject]@{
+                    Name = "$size.bin"; FullName = "$size.bin"; Length = $size
+                    Extension = '.bin'; LastWriteTime = [datetime]'2026-01-01'
+                }
+            }
+        }
+        $result = Get-DirectoryLargeFileReport -Path 'mock-only' -Top 1
+        @($result.Images).Count | Should -Be 0
+        @($result.OtherFiles).Count | Should -Be 1
+        $result.OtherFiles[0].Bytes | Should -Be 9007199254740993L
+    }
+
+    It 'returns empty category arrays for an empty scan' {
+        Mock Get-DirectoryScanFiles { }
+        $result = Get-DirectoryLargeFileReport -Path 'mock-only'
+        @($result.Images).Count | Should -Be 0
+        @($result.OtherFiles).Count | Should -Be 0
+    }
+
+    It 'keeps readable rows and warning records after a late partial scan' {
+        Mock Get-DirectoryScanFiles {
+            [pscustomobject]@{
+                Name = 'readable.vhd'; FullName = 'readable.vhd'; Length = 3L
+                Extension = '.vhd'; LastWriteTime = [datetime]'2026-01-01'
+            }
+            Write-Warning 'Directory scan incomplete: fixture late failure.' -WarningAction Continue
+        }
+        $records = @(Get-DirectoryLargeFileReport -Path 'mock-only' 3>&1)
+        @($records | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }).Count | Should -Be 1
+        $result = $records | Where-Object { $_ -isnot [System.Management.Automation.WarningRecord] }
+        $result.Images[0].Name | Should -Be 'readable.vhd'
+        @($result.OtherFiles).Count | Should -Be 0
+    }
+}
+
 Describe 'Optional LAN diagnostic (all network constructors mocked)' {
     BeforeEach {
         Mock New-Object { throw 'Real network access is forbidden.' } -ParameterFilter { $TypeName -like 'System.Net.*' }

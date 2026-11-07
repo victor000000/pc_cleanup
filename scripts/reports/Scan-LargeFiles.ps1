@@ -13,10 +13,6 @@ if (-not $PSBoundParameters.ContainsKey('ProfilePath')) {
     $ProfilePath = Get-DirectoryReportDefaultPath -Kind Profile
 }
 
-$imageExtensions = @('.vhdx', '.vhd', '.vmdk', '.vmem', '.vmss', '.iso', '.ova', '.qcow2', '.img')
-$profileFiles = @(Get-DirectoryScanFiles -Path $ProfilePath | ConvertTo-DirectoryReportFileRow |
-    Where-Object { $imageExtensions -contains $_.Extension -or $_.Bytes -gt $MinimumFileBytes })
-$images = @($profileFiles | Where-Object { $imageExtensions -contains $_.Extension })
-$otherFiles = @($profileFiles | Where-Object { $imageExtensions -notcontains $_.Extension -and $_.Bytes -gt $MinimumFileBytes })
-Show-DirectoryFileReport -Label "Disk images / ISO / VM files under $ProfilePath" -Rows $images -Top $Top
-Show-DirectoryFileReport -Label "Other files over $MinimumFileBytes bytes under $ProfilePath" -Rows $otherFiles -Top $Top
+$report = Get-DirectoryLargeFileReport -Path $ProfilePath -MinimumFileBytes $MinimumFileBytes -Top $Top
+Show-DirectoryFileReport -Label "Disk images / ISO / VM files under $ProfilePath" -Rows $report.Images -Top $Top
+Show-DirectoryFileReport -Label "Other files over $MinimumFileBytes bytes under $ProfilePath" -Rows $report.OtherFiles -Top $Top

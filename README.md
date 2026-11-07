@@ -1,5 +1,7 @@
 # PC Cleanup
 
+Version **0.0.3** — [release design and limitations](docs/RELEASE-0.0.3.md).
+
 A Windows PowerShell toolkit for storage reports, USB recovery, and selected Windows/VHD maintenance. Start with a report, inspect the target, and preview maintenance before approving it. File sizes alone do not establish what can be deleted.
 
 ## Start here
@@ -13,6 +15,16 @@ For a focused, read-only report:
 ```
 
 This measures immediate subdirectories recursively and lists large files directly under the selected root. `-Top` limits the displayed rows, not the amount scanned. Warnings indicate partial results; sizes are logical file lengths, not reclaimable space.
+
+For a structured review with partial-scan warnings included in the result:
+
+```powershell
+.\scripts\reports\Get-CleanupReview.ps1 -RootPath "$env:USERPROFILE\Downloads" -MinimumFileBytes 100MB -Top 20 -Format Json
+```
+
+The new command emits data only. Its inclusive size threshold and top-N list do
+not establish that any file is disposable; check `ScanStatus`, warning counts,
+and truncation flags. Omit `-Format Json` for an object suitable for pipelines.
 
 Choose the guide for your task:
 

@@ -39,3 +39,9 @@ Pester and PSScriptAnalyzer versions, download URLs, and package SHA-512 hashes 
 - Coverage instruments reusable `src` source only. [Quality.psd1](../tools/Quality.psd1) sets the command-coverage minimum, currently **90%**, for coverage-enabled runs. CI always enables coverage. Missing/empty/invalid coverage fails closed. Native C# and real hardware are not validated by a percentage; do not lower the threshold to hide a missing safety case.
 
 Generated artifacts are per-engine NUnit XML, lint JSON, environment metadata, and optional JaCoCo coverage. They are local/CI outputs, not checked-in evidence of a current successful run.
+
+## Large-file report selection
+
+`Get-DirectoryLargeFileReport` consumes one metadata traversal and retains at most `Top` rows in each of its image and ordinary-file categories. Binary insertion orders retained rows by exact Int64 byte length; equal sizes retain encounter order. Each category temporarily holds at most `Top + 1` rows during insertion. Candidate storage is therefore proportional to `Top`, with at most `Top` shifts per accepted row. The scanner still keeps its directory traversal stack, and the report still visits all readable entries.
+
+Images qualify regardless of size; ordinary files must be strictly larger than `MinimumFileBytes`. Unreadable entries and skipped links retain the existing partial-scan warning behavior. Selection does not estimate reclaimable space or authorize maintenance. Tests cover category separation, cutoff ties, empty results, exact large integer ordering, a single traversal, and partial-scan retention.

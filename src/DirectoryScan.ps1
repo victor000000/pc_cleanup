@@ -177,3 +177,48 @@ function Show-DirectorySizeReport {
         Show-DirectoryFileReport -Label "Root files over $MinimumFileBytes bytes" -Rows $files -Top $Top
     }
 }
+
+# Retain at most Top rows per category while consuming the metadata stream once.
+function Get-DirectoryLargeFileReport {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [ValidateRange(0, [long]::MaxValue)][long]$MinimumFileBytes = 1GB,
+        [ValidateRange(1, 1000)][int]$Top = 40
+    )
+
+    $imageExtensions = @('.vhdx', '.vhd', '.vmdk', '.vmem', '.vmss', '.iso', '.ova', '.qcow2', '.img')
+    $images = New-Object 'System.Collections.Generic.List[object]'
+    $otherFiles = New-Object 'System.Collections.Generic.List[object]'
+    Get-DirectoryScanFiles -Path $Path | ConvertTo-DirectoryReportFileRow | ForEach-Object {
+        $row = $_
+        if ($imageExtensions -contains $row.Extension) {
+            $selected = $images
+        } elseif ($row.Bytes -gt $MinimumFileBytes) {
+            $selected = $otherFiles
+        } else {
+            return
+        }
+
+        # Descending exact bytes, with equal sizes kept in encounter order.
+        # The upper-bound insertion point also drops late ties at the cutoff.
+        $low = 0
+        $high = $selected.Count
+        while ($low -lt $high) {
+            $middle = $low + [int][math]::Floor(($high - $low) / 2)
+            if ($selected[$middle].Bytes -ge $row.Bytes) {
+                $low = $middle + 1
+            } else {
+                $high = $middle
+            }
+        }
+        if ($low -lt $Top) {
+            $selected.Insert($low, $row)
+            if ($selected.Count -gt $Top) { $selected.RemoveAt($Top) }
+        }
+    }
+    [pscustomobject]@{
+        Images = $images.ToArray()
+        OtherFiles = $otherFiles.ToArray()
+    }
+}
