@@ -17,7 +17,7 @@ Describe 'Read-only structured cleanup review' {
     }
     It 'returns explicit complete empty arrays and release metadata for an empty directory' {
         $r = Get-DirectoryReviewReport -RootPath $script:ReviewRoot
-        $r.ToolVersion | Should -Be '0.0.3'
+        $r.ToolVersion | Should -Be '0.0.4'
         $r.SchemaVersion | Should -Be 1
         $r.ScanStatus | Should -Be 'Complete'
         $r.Candidates.Count | Should -Be 0
@@ -135,6 +135,26 @@ Describe 'Read-only structured cleanup review' {
         { Get-DirectoryReviewReport -RootPath $script:ReviewRoot -Top 0 } | Should -Throw
         { Get-DirectoryReviewReport -RootPath $script:ReviewRoot -MinimumFileBytes -1 } | Should -Throw
         { Get-DirectoryReviewReport -RootPath $script:ReviewRoot -WarningLimit -1 } | Should -Throw
+    }
+    It 'reports a root below a junction as partial without enumerating its target' {
+        $fixture = Join-Path $TestDrive ('junction-root-' + [guid]::NewGuid())
+        $target = Join-Path $fixture 'target'
+        $targetChild = Join-Path $target 'child'
+        $junction = Join-Path $fixture 'junction'
+        $null = [IO.Directory]::CreateDirectory($targetChild)
+        [IO.File]::WriteAllText((Join-Path $targetChild 'fixture.txt'), 'sample')
+        $null = New-Item -ItemType Junction -Path $junction -Target $target -ErrorAction Stop
+        try {
+            Mock Get-DirectoryScanFileSystemInfos { throw 'must not enumerate a junction target' }
+            $report = Get-DirectoryReviewReport -RootPath (Join-Path $junction 'child') -MinimumFileBytes 0
+            $report.ScanStatus | Should -Be 'Partial'
+            $report.FilesScanned | Should -Be 0
+            $report.WarningCount | Should -Be 1
+            $report.Warnings[0] | Should -Match 'reparse point'
+            Should -Invoke Get-DirectoryScanFileSystemInfos -Times 0 -Exactly
+        } finally {
+            [IO.Directory]::Delete($junction)
+        }
     }
     It 'emits one JSON document with stable arrays and warnings inside the report' {
         $entry = Join-Path $ProjectRoot 'scripts\reports\Get-CleanupReview.ps1'

@@ -6,7 +6,7 @@ Run the PowerShell examples from the project root on Windows. Imports resolve re
 
 ## Reports
 
-The five legacy reports in this table require no elevation and emit formatted text. The separate [structured review](#structured-cleanup-review-003) emits objects or JSON. They skip links, offline files, and cloud recall placeholders; warnings mean totals are partial. Displayed `GB` values divide logical byte lengths by PowerShell's `1GB` constant (1,073,741,824 bytes). Allocated space and reclaimable space can differ.
+The five legacy reports in this table require no elevation and emit formatted text. The separate [structured review](#structured-cleanup-review) emits objects or JSON. They skip links, offline files, and cloud recall placeholders; warnings mean totals are partial. Displayed `GB` values divide logical byte lengths by PowerShell's `1GB` constant (1,073,741,824 bytes). Allocated space and reclaimable space can differ.
 
 | Script in `scripts/reports/` | Parameters and defaults | Scope |
 |---|---|---|
@@ -94,7 +94,7 @@ The Handle wrapper supports `-WhatIf` and confirmation. Real execution verifies 
 
 The root `configure-defender-startup.ps1` and `verify-defender-startup.ps1` are separate local scripts with no parameters, `-WhatIf`, or confirmation. They are not called by reports, maintenance, or the test runner. Use the [Defender startup guide](DEFENDER-STARTUP.md) for the exact task behavior, verification, local outputs, and removal procedure.
 
-## Structured cleanup review (0.0.3)
+## Structured cleanup review
 
 `Get-CleanupReview.ps1 -RootPath <literal filesystem path>` returns one object.
 `-Format Json` emits one JSON document, with warnings inside it. `-MinimumFileBytes`
@@ -106,9 +106,9 @@ all warnings; `WarningsTruncated` marks a shortened sample. `MatchingFileCount`
 counts all matching files; `CandidatesTruncated` marks a shortened candidate list.
 FilesScanned and LogicalBytesScanned count successfully inspected file metadata.
 `Candidates` and `Warnings` stay arrays even with zero or one element. Results
-include ToolVersion 0.0.3 and SchemaVersion 1. No file contents are read and no
+include ToolVersion from the project manifest and SchemaVersion 1. No file contents are read and no
 report files are created. Saving output is an explicit caller action; treat paths
-and metadata as private. See [release design](RELEASE-0.0.3.md) for limitations.
+and metadata as private. A root beneath a reparse point or cloud placeholder returns Partial before enumeration. See [release notes](RELEASE-0.0.4.md) for limitations.
 
 ### Schema 1 output contract
 

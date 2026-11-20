@@ -11,12 +11,32 @@ function Get-DirectoryScanFileSystemInfos {
 
 function Get-DirectoryScanChildren {
     [CmdletBinding()]
-    param([Parameter(Mandatory = $true)][string]$Path)
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [switch]$ParentDirectoriesChecked
+    )
 
     # Recall flags are numeric because they are not named on all PS5.1 runtimes.
     $excludedAttributes = [long][System.IO.FileAttributes]::ReparsePoint -bor
         [long][System.IO.FileAttributes]::Offline -bor 0x40000 -bor 0x400000
     try {
+        $directory = [System.IO.DirectoryInfo]::new($Path)
+        if (-not $ParentDirectoriesChecked) {
+            # Inspect parents from the volume root toward the scan path so a
+            # junction or placeholder is detected before reading through it.
+            $parents = [Collections.Generic.Stack[string]]::new()
+            for ($parent = $directory.Parent; $null -ne $parent; $parent = $parent.Parent) {
+                $parents.Push($parent.FullName)
+            }
+            while ($parents.Count -gt 0) {
+                $parentPath = $parents.Pop()
+                $parentAttributes = [System.IO.File]::GetAttributes($parentPath)
+                if (([long]$parentAttributes -band $excludedAttributes) -ne 0) {
+                    Write-Warning "Directory scan incomplete: skipped reparse point or cloud placeholder '$parentPath' above '$Path'." -WarningAction Continue
+                    return
+                }
+            }
+        }
         # Check even the root, and check queued directories again before opening them.
         # DirectoryInfo.Exists would silently turn access failures into "not found".
         $attributes = [System.IO.File]::GetAttributes($Path)
@@ -28,7 +48,6 @@ function Get-DirectoryScanChildren {
             Write-Warning "Directory scan incomplete: '$Path' is not a directory." -WarningAction Continue
             return
         }
-        $directory = [System.IO.DirectoryInfo]::new($Path)
         Get-DirectoryScanFileSystemInfos -Directory $directory -ErrorAction Stop | ForEach-Object {
             $entry = $_
             try {
@@ -61,7 +80,7 @@ function Get-DirectoryScanFiles {
         $current = $stack.Pop()
         # Stream each directory so a late failure retains its readable entries and
         # already queued siblings. Never retry recursively with a second traversal.
-        Get-DirectoryScanChildren -Path $current | ForEach-Object {
+        Get-DirectoryScanChildren -Path $current -ParentDirectoriesChecked:($current -ne $Path) | ForEach-Object {
             if (($_.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0) {
                 $stack.Push($_.FullName)
             } else {

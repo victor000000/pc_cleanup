@@ -1,6 +1,6 @@
 # PC Cleanup
 
-Version **0.0.3** — [original release design](docs/RELEASE-0.0.3.md) and [current documentation audit](docs/DOCUMENTATION-AUDIT-2026-11-07.md).
+Version **0.0.4**. See [release notes](docs/RELEASE-0.0.4.md) and the [documentation audit](docs/DOCUMENTATION-AUDIT-2026-11-07.md).
 
 A Windows PowerShell toolkit for storage reports, USB recovery, and selected Windows/VHD maintenance. Start with a report, inspect the target, and preview maintenance before approving it. File sizes alone do not establish what can be deleted.
 

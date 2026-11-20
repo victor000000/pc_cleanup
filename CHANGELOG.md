@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.4 — Directory scan boundary (2026-11-21)
+
+- Check parent directories before enumerating an explicit scan root. A junction or cloud placeholder in the path produces a partial scan with a warning.
+- Clarify the structured report version, completeness, and validation in the command and release guides.
+
 ## 0.0.3 — Published source (2026-11-07)
 
 - Bound legacy large-file selection to Top rows per category while preserving threshold and tie behavior.
