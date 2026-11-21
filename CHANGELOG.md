@@ -3,7 +3,7 @@
 ## 0.0.4 — Directory scan boundary (2026-11-21)
 
 - Check parent directories before enumerating an explicit scan root. A junction or cloud placeholder in the path produces a partial scan with a warning.
-- Clarify the structured report version, completeness, and validation in the command and release guides.
+- Document the structured report version and completeness fields, Windows setup and CI outputs, and read-only checks after USB and VHD operations. [0.0.4 release notes](docs/RELEASE-0.0.4.md)
 
 ## 0.0.3 — Published source (2026-11-07)
 

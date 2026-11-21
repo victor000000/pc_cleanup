@@ -5,7 +5,7 @@
 ## Boundaries
 
 - `src/DirectoryScan.ps1`: metadata traversal and report assembly; skips reparse/recall/offline entries and reports partial reads visibly.
-- `src/DirectoryReview.ps1`: schema/versioned review aggregation with embedded warnings and bounded candidate retention; imports the shared scanner, not maintenance helpers.
+- `src/DirectoryReview.ps1` builds the schema-versioned report and retains a bounded set of candidates and warnings. The report entrypoint loads both this helper and the shared scanner.
 - `src/UsbEject.ps1`: stable disk identity validation, PnP mapping, and a single checked native eject request. Native calls are behind replaceable PowerShell adapters.
 - `src/DiskRecovery.ps1`: identity-based online and drive-letter recovery, including confirmation-time revalidation and collision refusal.
 - `src/VhdMaintenance.ps1`: VHD preflight/owned attachment lifecycle, checked native commands, pagefile changes/rollback, and maintenance logging.
@@ -67,7 +67,7 @@ The object schema is the integration boundary; `src` functions are internal dot-
 
 ## Ownership and failure boundaries
 
-USB mutation resolves one non-system USB identity and revalidates its mapping after confirmation. A successful eject result means Windows accepted the request, not independent proof the device is physically absent. Online/letter commands verify readback and refuse ambiguous partitions or occupied letters.
+USB mutation resolves one non-system USB identity and revalidates its mapping after confirmation. A successful eject result records Windows accepting the request. The online helper reads the disk back after `Set-Disk`. The drive-letter helper rechecks the partition and letter availability before `Set-Partition`. Operators can verify the resulting letter with read-only inventory. [Verify a drive letter](TROUBLESHOOTING.md#verify-a-drive-letter)
 
 VHD preflight validates the path, required Storage command parameters, detached state, and exclusive access. Compaction rechecks and acquires a read-only attachment without a drive letter; its `finally` releases only that attachment. Exclusive access is a point-in-time check, not a permanent concurrency lock. The native adapter checks exit status; DiskPart compaction also requires a recognized success acknowledgement. Logs retain diagnostics but are not signed forensic receipts.
 

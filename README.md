@@ -1,32 +1,34 @@
 # PC Cleanup
 
-Version **0.0.4**. See [release notes](docs/RELEASE-0.0.4.md) and the [documentation audit](docs/DOCUMENTATION-AUDIT-2026-11-07.md).
+Version **0.0.4**. [Release notes](docs/RELEASE-0.0.4.md) · [Changelog](CHANGELOG.md)
 
 A Windows PowerShell toolkit for storage reports, USB recovery, and selected Windows/VHD maintenance. Start with a report, inspect the target, and preview maintenance before approving it. File sizes alone do not establish what can be deleted.
 
 ## Start here
 
-Run examples in **Windows PowerShell 5.1 or PowerShell 7 on Windows**, from the project directory. Reports and tests do not require administrator rights. Storage and maintenance operations may require an elevated session; `Invoke-SystemCleanup.ps1` requires Windows PowerShell 5.1.
+Clone the project or extract its source archive. Keep `scripts` and `src` together under the directory containing `Project.psd1`. [Source repository](https://github.com/victor000000/pc_cleanup)
 
-For a focused, read-only report:
+Run the examples from that directory in **Windows PowerShell 5.1 or PowerShell 7 on Windows**. Reports work with an ordinary user account. PowerShell 7 is a separate installation and supplies `pwsh.exe`.
 
-```powershell
-.\scripts\reports\Scan-TopLevel.ps1 -RootPath "$env:USERPROFILE\Downloads" -Top 15
-```
-
-This measures immediate subdirectories recursively and lists large files directly under the selected root. `-Top` limits the displayed rows, not the amount scanned. Warnings indicate partial results; sizes are logical file lengths, not reclaimable space.
-
-For a structured review with partial-scan warnings included in the result:
+Try the formatted report on the checkout's own documentation. To inspect another directory, substitute its absolute filesystem path.
 
 ```powershell
-.\scripts\reports\Get-CleanupReview.ps1 -RootPath "$env:USERPROFILE\Downloads" -MinimumFileBytes 100MB -Top 20 -Format Json
+$reportRoot = (Get-Item -LiteralPath .\docs).FullName
+.\scripts\reports\Scan-TopLevel.ps1 -RootPath $reportRoot -Top 15
 ```
 
-The new command emits data only. Its inclusive size threshold and top-N list do
-not establish that any file is disposable; check `ScanStatus`, warning counts,
-and truncation flags. Omit `-Format Json` for an object suitable for pipelines.
+This measures immediate subdirectories recursively and lists large files directly under the selected root. `-Top` limits the displayed rows. The report still scans the selected tree. Warnings indicate partial results. Sizes measure logical file lengths.
 
-Choose the guide for your task:
+To inspect a machine-readable result, include files of every size from the same directory.
+
+```powershell
+$reportRoot = (Get-Item -LiteralPath .\docs).FullName
+.\scripts\reports\Get-CleanupReview.ps1 -RootPath $reportRoot -MinimumFileBytes 0 -Top 5 -Format Json
+```
+
+Read `ScanStatus` and `WarningCount` to see whether any paths were skipped. `CandidatesTruncated` means more files met the inclusive threshold than fit in the list. Omit `-Format Json` to receive one PowerShell object with a `Candidates` array.
+
+Choose the guide for your task.
 
 | Task | Guide |
 |---|---|
@@ -35,6 +37,7 @@ Choose the guide for your task:
 | Understand limits before changing disks or system settings | [Safety contract](docs/SAFETY.md) |
 | Inspect, verify, or undo the local Defender startup configuration | [Defender startup guide](docs/DEFENDER-STARTUP.md) |
 | Install development tools and validate a change | [Contributing](CONTRIBUTING.md) |
+| Publish a source release or return to a known-good revision | [Release procedure](CONTRIBUTING.md#release-a-source-version) |
 | Change reusable helpers or test boundaries | [Architecture](docs/ARCHITECTURE.md) |
 | Find an older script name | [Migration map](docs/MIGRATION.md) |
 
@@ -57,16 +60,17 @@ For VHD compaction, select one image explicitly and stop its owner yourself befo
 .\scripts\maintenance\Invoke-VhdCompaction.ps1 -VhdPath 'C:\path\reviewed-image.vhdx' -WhatIf
 ```
 
-The guarded storage and maintenance commands support `-WhatIf` and confirmation. A preview describes intent; it does not validate every prerequisite or prove a device will accept the operation. To carry out a reviewed operation, omit `-WhatIf` and inspect the confirmation. See the command reference for prerequisites, combined-operation effects, and logs.
+The guarded commands support `-WhatIf` and confirmation. A preview describes the requested change. Real storage and maintenance operations can require elevation, and `Invoke-SystemCleanup.ps1` requires Windows PowerShell 5.1. Review the command's prerequisites, order of effects, and recovery instructions before a real run. [Command reference](docs/COMMANDS.md#maintenance) · [Recovery](docs/TROUBLESHOOTING.md#maintenance)
 
-The two local Defender scripts have a separate contract: they do **not** support `-WhatIf` or confirmation. Their [guide](docs/DEFENDER-STARTUP.md) documents this exception and task behavior and removal procedure.
+The two root Defender scripts can change settings or write local results without a preview or confirmation. See the guide for task behavior, verification, and removal. [Defender startup guide](docs/DEFENDER-STARTUP.md)
 
 ## Development quick start
 
-Runtime reports do not need Pester or PSScriptAnalyzer. For development, explicitly install the pinned, hash-verified packages into `.tools`, then validate:
+For development, the initial setup needs HTTPS access to PowerShell Gallery and write access to the checkout. It installs the pinned, hash-verified packages into `.tools`. Subsequent test runs use this local cache.
 
 ```powershell
 powershell.exe -NoProfile -NonInteractive -File .\tools\Install-DevDependencies.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Development dependency setup failed.' }
 powershell.exe -NoProfile -NonInteractive -File .\Test.ps1 -Coverage
 ```
 

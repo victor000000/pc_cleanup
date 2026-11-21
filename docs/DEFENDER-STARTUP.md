@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Commands](COMMANDS.md) · [Troubleshooting](TROUBLESHOOTING.md)
 
-This guide describes the two root scripts created for this PC's requested Defender configuration. Both scripts are tracked in a clean clone; their generated JSON files are ignored. Their presence does not establish that a task is installed on any machine. Disabling these protections increases exposure to malware. Reports, maintenance, development setup, and tests do not invoke these scripts or install this task.
+The two scripts in the repository root describe an optional, machine-specific Defender configuration. A source checkout includes the scripts. Inspect Task Scheduler and Windows Security to determine the machine's actual state. Generated JSON contains local diagnostics. Disabling these protections increases exposure to malware.
 
 ## Behavior
 
@@ -25,12 +25,12 @@ Setup writes `defender-startup-result.json` beside the script. `Success: true` r
 
 ## Verify without changing protection settings
 
-Use an elevated Windows PowerShell window, from the project root. These commands inspect the task and Defender status; the verification script writes a local JSON file:
+Run these checks from the project root in an elevated Windows PowerShell session. The verification script writes a local JSON file. The other commands read the task and current protection status.
 
 ```powershell
 .\verify-defender-startup.ps1
 Get-Content -LiteralPath .\defender-startup-verification.json -Raw
-Get-ScheduledTask -TaskName 'Disable Microsoft Defender at startup' |
+Get-ScheduledTask -TaskPath '\' -TaskName 'Disable Microsoft Defender at startup' |
     Select-Object TaskName, State, @{Name = 'Enabled'; Expression = { $_.Settings.Enabled }}
 Get-MpComputerStatus | Select-Object AntivirusEnabled, RealTimeProtectionEnabled, IsTamperProtected
 ```
@@ -47,11 +47,9 @@ After a separately approved reboot, allow the startup delay and execution time, 
 
 ```powershell
 Get-CimInstance Win32_OperatingSystem | Select-Object LastBootUpTime
-Get-ScheduledTaskInfo -TaskName 'Disable Microsoft Defender at startup' |
+Get-ScheduledTaskInfo -TaskPath '\' -TaskName 'Disable Microsoft Defender at startup' |
     Select-Object LastRunTime, LastTaskResult
 ```
-
-Earlier local setup evidence reported successful execution without rebooting. That machine-specific observation is not a clean-clone prerequisite or evidence of the current task state, behavior across a full reboot, or future Windows updates.
 
 ## Troubleshoot
 
@@ -67,18 +65,26 @@ The root JSON files contain local execution details and are explicitly ignored b
 
 ## Remove the task and restore its three preferences
 
-Run the following **only when intentionally undoing this configuration**, in elevated Windows PowerShell. Remove the task before restoring preferences so a later boot cannot reapply them:
+Use elevated Windows PowerShell when you intend to remove this task and enable the three protections. Setup does not save their previous values. Check the intended settings with the machine's administrator if another policy manages Defender. This block selects the task by its root folder and exact name, then verifies removal before changing preferences.
 
 ```powershell
-Stop-ScheduledTask -TaskName 'Disable Microsoft Defender at startup' -ErrorAction Stop
-Unregister-ScheduledTask -TaskName 'Disable Microsoft Defender at startup' -Confirm -ErrorAction Stop
-if (Get-ScheduledTask -TaskName 'Disable Microsoft Defender at startup' -ErrorAction SilentlyContinue) {
-    throw 'The startup task still exists. Stop and inspect it before restoring preferences.'
+& {
+    $ErrorActionPreference = 'Stop'
+    $taskName = 'Disable Microsoft Defender at startup'
+    $matchesTask = { $_.TaskPath -eq '\' -and $_.TaskName -eq $taskName }
+    $task = Get-ScheduledTask | Where-Object $matchesTask
+    if ($task) {
+        if ($task.State -eq 'Running') { Stop-ScheduledTask -TaskPath '\' -TaskName $taskName }
+        Unregister-ScheduledTask -TaskPath '\' -TaskName $taskName -Confirm
+    }
+    if (Get-ScheduledTask | Where-Object $matchesTask) {
+        throw 'The startup task still exists. Inspect it before continuing.'
+    }
+    Set-MpPreference -DisableRealtimeMonitoring $false -DisableBehaviorMonitoring $false -DisableIOAVProtection $false
+    Get-MpComputerStatus | Select-Object AntivirusEnabled, RealTimeProtectionEnabled, IsTamperProtected
 }
-Set-MpPreference -DisableRealtimeMonitoring $false -DisableBehaviorMonitoring $false -DisableIOAVProtection $false
-Get-MpComputerStatus | Select-Object AntivirusEnabled, RealTimeProtectionEnabled, IsTamperProtected
 ```
 
-Stop if task removal fails or is declined. If the task is already absent, inspect current settings before deciding which preferences to restore. Restoring these preferences does not undo unrelated firewall or registry policy changes, and another policy or security provider may still control the observed state. Check Windows Security and the applicable policy if protection remains disabled.
+If removal is declined or a scheduler query fails, the block stops before the preference update. Check Windows Security and the applicable management policy if protection remains disabled after restoration.
 
 References: Microsoft documents [task removal](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/unregister-scheduledtask) and [Defender preference controls](https://learn.microsoft.com/en-us/powershell/module/defender/set-mppreference).

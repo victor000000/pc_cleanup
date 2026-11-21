@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Current commands](COMMANDS.md) · [Architecture](ARCHITECTURE.md)
 
-Original text/source files were copied into `archive/2026-10-20/source-before-restructure` with a `.txt` suffix and a SHA-256 manifest before moving or modifying them. Snapshots are non-executable references and ignored by Git. Historical results and binaries were moved, not deleted.
+Use the mapping below to update commands and shortcuts from the original layout. A source checkout contains the supported scripts and reference templates. Any operator's `archive/` directory is local and excluded from Git.
 
 ## Command map
 
@@ -33,7 +33,7 @@ Preserving alias names under `scripts/compat` does **not** preserve old root inv
 
 - Reports accept profile/root/app overrides instead of assuming a particular user's paths, terminal hash, or WSL distribution ID. If omitted, root/profile targets come from the current Windows environment; see the [current defaults and scan scope](COMMANDS.md#reports).
 - All compaction entrypoints require `-VhdPath`; no machine-specific default image is selected.
-- Default logs are unique `.local/logs` files created only after approval, not overwrites of historical evidence.
+- The VHD and Handle commands create a new log after approval. Standalone hibernation writes a log only when given `-LogPath`.
 - Hibernation is guarded and checked rather than an immediate mutation.
 - LAN diagnostics require an explicit private subnet target; there is no automatic two-subnet sweep.
 - Handle requires explicit search and EULA acceptance. No vendor executable is downloaded or run automatically.
@@ -41,13 +41,13 @@ Preserving alias names under `scripts/compat` does **not** preserve old root inv
 
 ## Local assets
 
-- Historical text results and robocopy logs: `archive/2026-10-18/results`.
+- Historical results and copy logs belong under the ignored `archive/` directory.
 - Installer downloads: `.local/downloads`.
 - Original Sysinternals files and EULA: `.local/vendor/sysinternals`.
 - Development dependencies and verified download staging: `.tools`.
 - Test/lint/coverage outputs: `artifacts`.
 
-These ignored assets are intentionally absent from a clean clone and from CI. Tests must not depend on them. No personal course files, market data, databases, backups, or external disks were cleaned during this restructuring.
+Development setup creates the pinned test dependencies under `.tools` on a fresh checkout or CI runner. Operators supply their own optional vendor tools. Keep archives, captured results, and machine-specific settings local.
 
 ## Later local additions
 
@@ -55,4 +55,4 @@ The root Defender startup/verification scripts were added separately from this l
 
 ## Version 0.0.3 interface additions
 
-Version 0.0.3 introduced the version field in `Project.psd1`. Existing report names remain supported. `Get-CleanupReview.ps1` adds an explicit-root object/JSON interface; it is not a replacement with identical output. Its threshold is inclusive and ties sort by path, while `Scan-LargeFiles` preserves strict ordinary-file thresholds and encounter-order ties. See the [structured contract](COMMANDS.md#structured-cleanup-review) before migrating consumers. There is no persistent database or configuration schema to migrate. Ignored local archives are historical assets, not distributed backups.
+Version 0.0.3 introduced `Project.psd1` and the explicit-root object/JSON report. Its threshold is inclusive and equal-size candidates sort by path. The legacy large-file report uses a strict threshold for ordinary files and retains earlier entries at an equal-size cutoff. Existing report names remain available. Read the field contract before migrating a consumer. [Structured report](COMMANDS.md#structured-cleanup-review)

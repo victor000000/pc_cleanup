@@ -4,10 +4,14 @@
 
 ## Set up
 
-Use fresh, noninteractive Windows PowerShell 5.1 and PowerShell 7 processes on Windows. Tests do not require elevation. Choose a checkout path without wildcard characters (square brackets, asterisk, question mark) or backticks: the pinned module loader, test discovery, and coverage backend reject these locations. Ordinary report input paths can contain brackets.
+Start in the checkout root on Windows, with write access to `.tools`, the validation output directory, and your temporary directory. The temporary directory must support the suite's disposable junctions and hard links, as on local NTFS. Tests run as an ordinary user. Choose a checkout path free of brackets, wildcard characters, and backticks for the pinned module loader and coverage tools. Report inputs may contain literal brackets.
+
+Both `powershell.exe` (Windows PowerShell 5.1) and `pwsh.exe` (PowerShell 7) must be available for release validation. The first setup downloads Pester 5.5.0 and PSScriptAnalyzer 1.24.0 over HTTPS from PowerShell Gallery. Both engines use the same repository-local installation. Check command availability and run setup from a Windows PowerShell session.
 
 ```powershell
+Get-Command -Name powershell.exe,pwsh.exe -CommandType Application -ErrorAction Stop
 powershell.exe -NoProfile -NonInteractive -File .\tools\Install-DevDependencies.ps1
+if ($LASTEXITCODE -ne 0) { throw 'Development dependency setup failed.' }
 ```
 
 [Dependencies.psd1](tools/Dependencies.psd1) is the source of truth for exact versions, official package URLs, and Base64 SHA-512 hashes. Setup verifies downloaded bytes before extraction and installs only under `.tools`; it does not install modules globally. Testing never bootstraps dependencies. Updating a pin requires reviewing the version, source, and hash and validating both engines.
@@ -16,7 +20,9 @@ powershell.exe -NoProfile -NonInteractive -File .\tools\Install-DevDependencies.
 
 ```powershell
 powershell.exe -NoProfile -NonInteractive -File .\Test.ps1 -Coverage
+if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 validation failed.' }
 pwsh.exe -NoProfile -NonInteractive -File .\Test.ps1 -Coverage
+if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 validation failed.' }
 ```
 
 `Test.ps1` accepts:
@@ -32,9 +38,14 @@ The gate parses owned PowerShell files, applies the configured correctness/secur
 After changing path resolution, also validate from an unrelated working directory:
 
 ```powershell
-$projectRoot = 'C:\path\pc_cleanup'
-Set-Location $env:TEMP
-powershell.exe -NoProfile -NonInteractive -File (Join-Path $projectRoot 'Test.ps1') -Coverage
+$runner = (Get-Item -LiteralPath .\Test.ps1).FullName
+Push-Location -LiteralPath ([IO.Path]::GetTempPath())
+try {
+    powershell.exe -NoProfile -NonInteractive -File $runner -Coverage
+    if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 validation failed.' }
+    pwsh.exe -NoProfile -NonInteractive -File $runner -Coverage
+    if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 validation failed.' }
+} finally { Pop-Location }
 ```
 
 Each completed run can produce these files in its output directory:
@@ -69,7 +80,26 @@ For documentation-only changes, check relative links, PowerShell example syntax,
 
 Follow `.editorconfig` and `.gitattributes`: Markdown uses UTF-8/LF; PowerShell uses UTF-8 with BOM/CRLF. Keep local history in `archive`, vendor files and runtime logs in `.local`, dependencies in `.tools`, and test results in `artifacts`. Those directories are ignored. The root Defender JSON outputs and installer downloads are also ignored; inspect `git status` and stage deliberately. Do not publish credentials, hardware-specific history, installers, vendor binaries, or local result files.
 
-[Windows CI](.github/workflows/ci.yml) uses `windows-2022`, both engines, pinned action revisions, read-only repository permissions, and `Test.ps1 -Coverage`. It uploads available artifacts after failures. Hosted CI must be observed on GitHub before claiming a hosted run passed; a workflow file or local passing run is insufficient. Publishing and pushing remain separate actions requiring authorization.
+The Windows workflow runs on pushes, pull requests, and manual dispatches. Each `windows-2022` job installs the pinned dependencies and runs `Test.ps1 -Coverage`. The `powershell` job writes to `artifacts/powershell` and the `pwsh` job to `artifacts/pwsh`. Actions attempts to upload each directory even after failure, with artifact names `validation-powershell` and `validation-pwsh` and a 14-day retention period. An early setup error can leave only the job log. Local defaults are `artifacts/ps-5` and `artifacts/ps-7`. [Workflow](.github/workflows/ci.yml)
+
+## Release a source version
+
+1. Use one Git checkout and one publisher with write access to the project repository. Start from the intended upstream revision. Update the version in `Project.psd1`, the `ToolVersion` expectation in the structured report tests, the README version and release link, the changelog, and the versioned release notes. `SchemaVersion` describes the report format and has its own compatibility contract. [Manifest](Project.psd1) · [Report tests](tests/DirectoryReview.Tests.ps1) · [Changelog](CHANGELOG.md)
+2. Run the two Windows coverage commands above in fresh processes. Check local Markdown links and heading anchors, parse examples in both engines, and run read-only report examples against the checkout or a disposable fixture. Use an absolute script path for a run from a different working directory.
+3. Inspect the working tree, staged files, and committed changes against the intended upstream base. Include the reviewed source, tests, and guides. Keep credentials, deployment data, machine-specific reports, and local validation receipts outside the published files.
+4. Push the reviewed source through the project's existing GitHub workflow. In Actions, match the final commit SHA to the published branch and confirm that `Validate (powershell)` and `Validate (pwsh)` both succeeded. If the upstream branch moved or a merge produced a new commit, check the run for the resulting SHA. The workflow distributes validation artifacts. The source checkout is the deliverable.
+
+For a committed candidate based on `origin/main`, these read-only Git commands show pending files, the committed change set, whitespace errors, and the candidate SHA. Refresh the upstream reference before comparing it.
+
+```powershell
+git status --short --branch
+git diff --cached --name-status
+git diff --name-status origin/main...HEAD
+git diff --check origin/main...HEAD
+git rev-parse HEAD
+```
+
+If a published regression needs to be withdrawn, the release owner can revert the affected change in a new reviewed commit and run both jobs again. To use a previous version locally, open its known-good commit in a fresh checkout. For a machine already changed by a maintenance command, inspect its current device, image, or pagefile state separately. [Operational recovery](docs/TROUBLESHOOTING.md#maintenance)
 
 ## Local environment and deployment scope
 
@@ -89,8 +119,8 @@ repository distributes source; CI does not deploy it or alter any user's PC.
 
 ## Documentation acceptance
 
-Inventory root Markdown, `docs/*.md`, and `docs/reference/*.txt`. Compare canonical guides with actual entrypoint parameter blocks, shared helper behavior, `.gitignore`, manifests, and CI. Inspect native/private checkout differences separately: do not merge private evidence or imply an older checkout contains a new published command. Keep dated release/checkpoint records immutable; put superseding status in a dated documentation audit and link it from current guides.
+Inventory root Markdown, `docs/*.md`, and `docs/reference/*.txt`. Compare the guides with entrypoint parameter blocks, shared helpers, `.gitignore`, manifests, and CI in the release checkout. Record user-visible changes in the release notes. Keep local checkout details, private verification receipts, and authentication history with the publisher.
 
-Check every relative Markdown link and heading anchor, parse every fenced PowerShell example in both engines without executing it, and inspect local-script invocation parameters against the target AST. Validate bootstrap pins, engine requirements, output paths, coverage policy, and command names from source. External URLs are references, not automatically crawled by offline checks. Commands involving device mutation, task setup, rollback, active network scans, or maintenance are syntax-checked only. A fixture-only report can verify the documented object/JSON shape without scanning user data.
+Check every relative Markdown link and heading anchor. Parse fenced PowerShell examples in both engines and compare script parameters with the target entrypoint. Check bootstrap pins, engine requirements, output paths, and coverage policy against the source and workflow. Offline checks cover local targets. Run read-only report examples on the checkout or a disposable fixture to verify their text, objects, and JSON. Use syntax checks or mocked commands for examples that touch devices, services, scheduled tasks, or the network.
 
-There is no dedicated Markdown gate in CI. Documentation checks are a separate manual acceptance step; `Test.ps1 -Coverage` remains the source gate in both engine lanes. Record exact scope and limitations in the [documentation audit](docs/DOCUMENTATION-AUDIT-2026-11-07.md), and require final published-SHA CI rather than treating a previous hosted run as acceptance of new documentation.
+Run these offline documentation checks alongside the source gate. Keep the detailed results locally. Use the workflow run on the final published SHA when reporting hosted status. [Earlier documentation changes](docs/DOCUMENTATION-AUDIT-2026-11-07.md)

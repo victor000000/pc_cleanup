@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Safety](SAFETY.md) · [Troubleshooting](TROUBLESHOOTING.md)
 
-Run the PowerShell examples from the project root on Windows. Imports resolve relative to each script, so absolute script paths also work from another directory. Optional arguments use the defaults below; script parameter blocks are the source of truth. `Get-Help <script> -Full` includes detailed descriptions where comment-based help exists.
+Run the PowerShell examples from the checkout root on Windows. Each script resolves its imports from its own directory. For help on a command with comment-based documentation, run, for example, `Get-Help .\scripts\storage\Eject-UsbDisk.ps1 -Full`.
 
 ## Reports
 
@@ -16,7 +16,9 @@ The five legacy reports in this table require no elevation and emit formatted te
 | [Scan-AppData.ps1](../scripts/reports/Scan-AppData.ps1) | `-ProfilePath` = current profile; `-AppPath` = no extra locations; `-Top 25` | All three AppData branches plus each supplied application directory |
 | [Get-DiskUsage.ps1](../scripts/reports/Get-DiskUsage.ps1) | `-RootPath` = system-drive root; `-ProfilePath` = current profile; `-Top 25` | Combined root/profile overview, selected Windows/temp/recycle locations, and profile files over 1GB |
 
-`-Top` accepts 1–1000 and limits displayed rows in each section. `Scan-LargeFiles` retains only the largest `Top` candidates per category during its single traversal, ordered by exact bytes; equal sizes keep encounter order. It does not cap traversal. These legacy report thresholds use **strictly greater than**, not greater than or equal to. In `Scan-TopLevel`, the threshold filters root files, not directories. Profile/AppData root-file sections use the shared 50MB default. `Get-DiskUsage` uses 100MB for system-root files and 50MB for profile-root files.
+Pass absolute filesystem paths to the five legacy reports, especially after `Set-Location`. For the current directory, `(Get-Item -LiteralPath .).FullName` supplies that path. The structured report resolves relative paths using the PowerShell filesystem location.
+
+`-Top` accepts 1–1000 and limits the displayed rows. `Scan-LargeFiles` visits the selected tree once and retains up to `Top` rows in each category. It keeps earlier entries at an equal-size cutoff. Its text formatter orders rows by byte size and the displayed order among ties can vary. Images qualify at any size. Ordinary files must be **strictly larger** than the threshold. In `Scan-TopLevel` the threshold applies to root files. Profile/AppData root-file sections use 50MB. `Get-DiskUsage` uses 100MB for system-root files and 50MB for profile-root files.
 
 `Get-DiskUsage -RootPath ...` still scans the current profile unless `-ProfilePath` is also supplied. Use `Scan-TopLevel` when only one root should be scanned. Combined reports can traverse overlapping trees repeatedly; prefer a focused report when speed matters.
 
@@ -44,6 +46,8 @@ Get-Disk | Format-List Number, FriendlyName, UniqueId, SerialNumber, BusType, Is
 
 These commands support `-WhatIf` and high-impact confirmation. Use a stable identity, never a drive letter or disk number as the identity. Disk numbers may be used for read-only partition inventory after matching the intended disk; mutation rechecks the mapping. Occupied letters are refused. An eject veto stops the operation without a force fallback.
 
+The online command reads back the disk's online state. After assigning a drive letter, read the selected partition again to verify the letter before using it. [USB recovery checks](TROUBLESHOOTING.md#verify-a-drive-letter)
+
 ```powershell
 .\scripts\storage\Eject-UsbDisk.ps1 -UniqueId 'COPY-EXACT-USB-UNIQUE-ID' -WhatIf
 .\scripts\storage\Set-UsbDiskOnline.ps1 -ExpectedDiskUniqueId 'COPY-EXACT-USB-UNIQUE-ID' -WhatIf
@@ -60,11 +64,11 @@ All scripts in this table support `-WhatIf`, high-impact confirmation, and optio
 |---|---|---|
 | [Invoke-VhdCompaction.ps1](../scripts/maintenance/Invoke-VhdCompaction.ps1) | Compact the selected image using an owned read-only attachment | Windows PowerShell 5.1 or PowerShell 7, required Storage APIs |
 | [Invoke-UbuntuMaintenance.ps1](../scripts/maintenance/Invoke-UbuntuMaintenance.ps1) | Compact the selected image, then run Windows DISM component-store analysis and cleanup | Same; DISM available |
-| [Invoke-SystemCleanup.ps1](../scripts/maintenance/Invoke-SystemCleanup.ps1) | Disable hibernation, set C: pagefile initial/maximum to 16384/32768MB via WMI, then compact the selected image | **Windows PowerShell 5.1**, WMI and Storage APIs |
+| [Invoke-SystemCleanup.ps1](../scripts/maintenance/Invoke-SystemCleanup.ps1) | Disable hibernation, turn off automatic pagefile management and set the existing C: pagefile to 16384/32768MB via WMI, then compact the image | **Windows PowerShell 5.1**, WMI and Storage APIs |
 | [Set-PagefileAndCompact.ps1](../scripts/maintenance/Set-PagefileAndCompact.ps1) | Replace only the C: `PagingFiles` registry entry with 16384/32768MB, then compact the selected image | Windows PowerShell 5.1 or PowerShell 7, required Storage APIs |
 | [Disable-Hibernation.ps1](../scripts/maintenance/Disable-Hibernation.ps1) | Run checked `powercfg /h off` | Windows PowerShell 5.1 or PowerShell 7 |
 
-The Ubuntu-named command runs DISM against the **Windows host**, not inside Ubuntu. Combined commands are not transactional: completed independent changes remain when a later step fails. Pagefile changes require a reboot; these scripts do not reboot the PC. Pagefile sizes in these entrypoints are fixed, not exposed as command-line parameters.
+The Ubuntu-named command runs DISM against the **Windows host** after compaction. Each completed step of a combined command can persist if a later step fails. The WMI pagefile step requires exactly one existing `C:\pagefile.sys` setting. The registry alternative requires one matching sized entry in the existing `PagingFiles` multi-string value. These entrypoints set fixed sizes. A separate reboot applies pagefile changes. [Recovery after a partial run](TROUBLESHOOTING.md#after-a-partial-maintenance-run)
 
 For a real compaction, use one absolute local `.vhd`/`.vhdx` path. The helper rejects unsafe paths, reparse-point traversal, missing Storage capabilities, and attached/busy images. It releases only its own successful attachment. English and Simplified Chinese DiskPart success acknowledgements are supported; other output is treated as failure. `-WhatIf` returns before full VHD preflight, so a successful preview does not prove the path or capabilities are valid.
 
@@ -73,7 +77,7 @@ For a real compaction, use one absolute local `.vhd`/`.vhdx` path. The helper re
 .\scripts\maintenance\Disable-Hibernation.ps1 -WhatIf
 ```
 
-Logs default to unique files under `.local/logs`. An explicit `-LogPath` must name a new absolute local file; existing files and reparse-point parent paths are refused. Logs begin only after approval and relevant preflight. `-WhatIf` creates no logs. The [DiskPart templates](reference/compact_docker.txt) and [Ubuntu template](reference/compact_ubuntu.txt) are reference material; use the guarded wrappers instead of executing the templates.
+The four VHD entrypoints and the Handle diagnostic create a unique log under `.local/logs` by default. Standalone `Disable-Hibernation.ps1` creates a log only when you supply `-LogPath`. For a custom log, choose a new absolute local filename with an ordinary ending such as `.log`. Avoid trailing dots and spaces because Windows can normalize them. Existing files and reparse-point parent paths are refused. Log creation follows confirmation and the relevant preflight checks. A preview creates no log. The DiskPart templates illustrate the commands generated by the wrappers. [Docker template](reference/compact_docker.txt) · [Ubuntu template](reference/compact_ubuntu.txt)
 
 ## Diagnostics
 
@@ -96,7 +100,7 @@ The root `configure-defender-startup.ps1` and `verify-defender-startup.ps1` are 
 
 ## Structured cleanup review
 
-`Get-CleanupReview.ps1 -RootPath <literal filesystem path>` returns one object.
+From the checkout root, `.\scripts\reports\Get-CleanupReview.ps1 -RootPath .\docs` returns one object.
 `-Format Json` emits one JSON document, with warnings inside it. `-MinimumFileBytes`
 is inclusive (default 100MB); `-Top` is 1–1000 (default 40); `-WarningLimit` is
 0–1000 (default 20). Relative paths use the current PowerShell filesystem location.
